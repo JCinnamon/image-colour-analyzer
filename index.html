@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Batch Image Colour Analysis Tool</title>
+  <title>Batch Image Colour Analyzer</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -374,8 +374,8 @@
 <body>
 
 <header class="page-header">
-  <h1>Batch Image Colour Analysis</h1>
-  <p>Analyse colour clusters across multiple images and download colour data</p>
+  <h1>Batch Image Colour Analyzer</h1>
+  <p>Analyze colour properties in large image datasets + download colour data</p>
 </header>
 
 <div class="page-body">
@@ -447,7 +447,7 @@
     </div>
 
     <div class="actions">
-      <button id="analyzeBtn" class="btn btn-primary" onclick="analyzeImages()">Analyse Images</button>
+      <button id="analyzeBtn" class="btn btn-primary" onclick="analyzeImages()">Analyze Images</button>
       <button id="debugToggle" class="btn btn-outline" onclick="toggleDebug()" style="display:none">Show log</button>
     </div>
   </div>
@@ -552,7 +552,7 @@ function getSuggestions(errorMsg) {
     items.push('Open the URL directly in your browser to verify it loads');
   } else if (errorMsg.includes('Failed to fetch')) {
     items.push('Check your internet connection');
-    items.push('The Colour Summarizer API may be temporarily unavailable — try again shortly');
+    items.push('The Color Summarizer API may be temporarily unavailable — try again shortly');
   } else {
     items.push('Verify the URL points to a valid, publicly accessible image file');
     items.push('Try a different image to rule out API issues');
@@ -629,7 +629,7 @@ async function analyzeImages() {
 
   for (let i = 0; i < imageUrls.length; i++) {
     const url = imageUrls[i];
-    setStatus(`Analysing image ${i + 1} of ${imageUrls.length}…`, 'progress');
+    setStatus(`Analyzing image ${i + 1} of ${imageUrls.length}…`, 'progress');
     log(`[${i + 1}/${imageUrls.length}] ${url}`);
 
     try {
@@ -652,10 +652,10 @@ async function analyzeImages() {
 
   // Summary bar
   let html = `<div class="summary-bar">
-    <div class="summary-stat">Analysed <b>${imageUrls.length}</b> image${imageUrls.length !== 1 ? 's' : ''}</div>`;
+    <div class="summary-stat">Analyzed <b>${imageUrls.length}</b> image${imageUrls.length !== 1 ? 's' : ''}</div>`;
   if (successCount) html += `<div class="summary-stat"><b>${successCount}</b> succeeded</div>`;
   if (failCount)    html += `<div class="summary-stat fail"><b>${failCount}</b> failed</div>`;
-  if (blobParts.length) html += `<div class="right"><button class="btn btn-outline" onclick="redownload()">⬇ Download TSV</button></div>`;
+  if (blobParts.length) html += `<div class="right"><button class="btn btn-outline" onclick="redownload()">⬇ Download Data</button></div>`;
   html += `</div>`;
 
   // Image cards
@@ -697,7 +697,7 @@ async function analyzeImages() {
   if (blobParts.length) {
     window._tsvBlob = new Blob(blobParts, { type: 'text/tab-separated-values' });
     downloadTSV(window._tsvBlob, 'color_summary_all.tsv');
-    setStatus('Analysis complete. TSV downloaded.', 'success');
+    setStatus('Analysis complete. File downloaded.', 'success');
   } else {
     setStatus('Analysis complete — all images failed. Check the log for details.', 'error');
   }
