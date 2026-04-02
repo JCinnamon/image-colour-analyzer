@@ -1,304 +1,714 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Batch Image Color Summarizer</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
-        h1 { color: #333; }
-        .info-box { background: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-        .info-box h3 { margin-top: 0; color: #1976d2; }
-        .info-box ul { margin: 10px 0; padding-left: 20px; }
-        label { display: block; margin-top: 10px; font-weight: bold; }
-        textarea, select, input[type="text"] { width: 100%; margin-bottom: 10px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        textarea { font-family: monospace; }
-        button { margin-top: 10px; padding: 12px 24px; background: #1976d2; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px; }
-        button:hover { background: #1565c0; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        .checkbox-group { margin: 15px 0; }
-        .checkbox-group label { display: inline-block; margin-right: 20px; font-weight: normal; }
-        #results { margin-top: 20px; }
-        .progress { padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; margin: 10px 0; }
-        .success { padding: 10px; background: #d4edda; border-left: 4px solid #28a745; margin: 10px 0; color: #155724; }
-        .error { padding: 10px; background: #f8d7da; border-left: 4px solid #dc3545; margin: 10px 0; color: #721c24; }
-        .warning { padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; margin: 10px 0; color: #856404; }
-        .image-result { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 4px; }
-        .image-result h4 { margin: 0 0 10px 0; color: #333; }
-        .summary { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 4px; }
-        #debug { margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batch Image Colour Analysis Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary:       #2c5f7a;
+      --primary-dark:  #1e4358;
+      --accent:        #1a9080;
+      --accent-hover:  #168070;
+      --accent-light:  #e6f4f1;
+      --border:        #dde8ed;
+      --bg-page:       #f0f4f7;
+      --bg-white:      #ffffff;
+      --text:          #1a2332;
+      --text-muted:    #6b7a8d;
+      --danger:        #c0392b;
+      --danger-bg:     #fef0ef;
+      --warning-bg:    #fff8e6;
+      --warning-border:#f0a500;
+      --success-bg:    #e6f4f1;
+      --radius:        6px;
+      --font:          'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-page);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    .page-header {
+      background: var(--primary);
+      color: white;
+      padding: 0.9rem 1.5rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .page-header h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .page-header p {
+      font-size: 0.78rem;
+      opacity: 0.72;
+      margin-top: 2px;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────── */
+    .page-body {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1.25rem 1.5rem;
+    }
+
+    /* ── Card ────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 0.9rem;
+    }
+    .card-title {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── Info box (collapsible) ───────────────────────────────── */
+    .info-box {
+      background: var(--accent-light);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 0.8rem 1rem;
+      margin-bottom: 0.9rem;
+      font-size: 0.82rem;
+    }
+    .info-box summary {
+      font-weight: 600;
+      color: var(--primary);
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+    .info-box summary::before {
+      content: '▶ ';
+      font-size: 0.65rem;
+      opacity: 0.6;
+    }
+    details[open] .info-box summary::before { content: '▼ '; }
+    .info-box ul {
+      margin: 0.55rem 0 0 1.1rem;
+      color: var(--text);
+    }
+    .info-box ul li { margin-bottom: 3px; }
+    .info-box .examples {
+      margin-top: 0.5rem;
+      font-family: monospace;
+      font-size: 0.77rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Form ────────────────────────────────────────────────── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .form-grid .full-width { grid-column: 1 / -1; }
+
+    .field label {
+      display: block;
+      font-size: 0.76rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    textarea, select {
+      width: 100%;
+      padding: 0.48rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 0.84rem;
+      color: var(--text);
+      background: var(--bg-white);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea:focus, select:focus { border-color: var(--accent); }
+    textarea {
+      font-family: monospace;
+      font-size: 0.78rem;
+      resize: vertical;
+    }
+
+    .checkbox-row {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .checkbox-row label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 0.84rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-outline {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .btn-outline:hover { background: var(--accent-light); }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+
+    /* ── Status bar ──────────────────────────────────────────── */
+    #statusArea { margin-bottom: 0.9rem; }
+    .status-bar {
+      padding: 0.55rem 0.9rem;
+      border-radius: var(--radius);
+      font-size: 0.82rem;
+    }
+    .status-progress { background: var(--warning-bg); border-left: 3px solid var(--warning-border); color: #7a5500; }
+    .status-success  { background: var(--success-bg); border-left: 3px solid var(--accent); color: var(--accent); }
+    .status-error    { background: var(--danger-bg); border-left: 3px solid var(--danger); color: var(--danger); }
+    .status-warning  { background: var(--warning-bg); border-left: 3px solid var(--warning-border); color: #7a5500; }
+
+    /* ── Summary bar ─────────────────────────────────────────── */
+    .summary-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: 0.7rem 1rem;
+      background: var(--bg-white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 0.75rem;
+    }
+    .summary-stat { font-size: 0.82rem; color: var(--text-muted); }
+    .summary-stat b { color: var(--text); }
+    .summary-stat.fail b { color: var(--danger); }
+    .summary-bar .right { margin-left: auto; }
+
+    /* ── Image cards ─────────────────────────────────────────── */
+    .image-card {
+      background: var(--bg-white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 0.75rem;
+    }
+    .image-card.is-success { border-left: 3px solid var(--accent); }
+    .image-card.is-error   { border-left: 3px solid var(--danger); }
+
+    .image-card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.7rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-page);
+    }
+    .thumb {
+      width: 52px;
+      height: 52px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .thumb-placeholder {
+      width: 52px;
+      height: 52px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+    }
+    .image-card-meta { flex: 1; min-width: 0; }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-bottom: 3px;
+    }
+    .badge-success { background: var(--success-bg); color: var(--accent); }
+    .badge-error   { background: var(--danger-bg);  color: var(--danger); }
+    .img-url {
+      font-size: 0.73rem;
+      font-family: monospace;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Colour swatches ─────────────────────────────────────── */
+    .swatches {
+      padding: 0.9rem 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: flex-end;
+    }
+    .swatch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .swatch-block {
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.08);
+      cursor: default;
+      transition: transform 0.1s;
+      width: 44px;
+    }
+    .swatch-block:hover { transform: scale(1.06); }
+    .swatch.dominant .swatch-block {
+      border: 2px solid var(--primary);
+    }
+    .swatch-pct {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text);
+      text-align: center;
+    }
+    .swatch-hex {
+      font-size: 0.63rem;
+      font-family: monospace;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ── Error detail ────────────────────────────────────────── */
+    .error-detail {
+      padding: 0.7rem 0.9rem;
+      font-size: 0.82rem;
+      color: var(--danger);
+    }
+    .error-detail ul {
+      margin: 0.4rem 0 0 1.1rem;
+      color: var(--text-muted);
+    }
+    .error-detail ul li { margin-bottom: 2px; }
+
+    /* ── Debug log ───────────────────────────────────────────── */
+    #debug {
+      font-family: monospace;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.6rem 0.9rem;
+      max-height: 180px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      margin-top: 0.75rem;
+      display: none;
+    }
+    #debug.visible { display: block; }
+
+    /* ── Footer ──────────────────────────────────────────────── */
+    .page-footer {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 1.5rem 2rem;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 0.9rem;
+      margin-top: 0.5rem;
+    }
+    .page-footer a { color: var(--accent); text-decoration: none; }
+    .page-footer a:hover { text-decoration: underline; }
+  </style>
 </head>
 <body>
-    <h1> Batch Image Color Summarizer Tool</h1>
-    
+
+<header class="page-header">
+  <h1>Batch Image Colour Analysis</h1>
+  <p>Analyse colour clusters across multiple images and download colour data</p>
+</header>
+
+<div class="page-body">
+
+  <!-- Instructions (collapsible) -->
+  <details>
     <div class="info-box">
-        <h3>Image URL Requirements</h3>
-        <ul>
-            <li><strong>Must be direct image links</strong> (ending in .jpg, .jpeg, or .png, only.)</li>
-            <li><strong>Must be publicly accessible</strong> (no authentication required)</li>
-            <li><strong>Use HTTPS</strong> when possible for better compatibility</li>
-        </ul>
-        <p><strong>Examples:</strong></p>
-        <ul>
-            <li>https://i.imgur.com/example.jpg</li>
-            <li>https://example.com/photos/image.png</li>
-        </ul>
-        
+      <summary>Image URL requirements</summary>
+      <ul>
+        <li><strong>Direct image links only</strong> — URL must end in .jpg, .jpeg, or .png</li>
+        <li><strong>Publicly accessible</strong> — no login or authentication required</li>
+        <li><strong>Use HTTPS</strong> where possible for better compatibility</li>
+      </ul>
+      <div class="examples">e.g. https://i.imgur.com/example.jpg &nbsp;·&nbsp; https://example.com/photos/image.png</div>
     </div>
-    
-    <label for="imageUrl">Image URLs (one per line):</label>
-    <textarea id="imageUrl" rows="6" placeholder="https://example.com/image1.jpg
-https://example.com/image2.jpg
-https://example.com/image3.png"></textarea>
-    
-    <label for="precision">Analysis Precision:</label>
-    <select id="precision">
-        <option value="vlow">Very Low (50px) - Fastest</option>
-        <option value="low">Low (75px) - Fast</option>
-        <option value="medium" selected>Medium (100px) - Balanced</option>
-        <option value="high">High (150px) - Detailed</option>
-        <option value="vhigh">Very High (200px) - Most Detailed</option>
-    </select>
-    
-    <label for="numClusters">Number of Color Clusters:</label>
-    <select id="numClusters">
-        <option value="0">No clustering</option>
-        <option value="2">2 clusters</option>
-        <option value="3">3 clusters</option>
-        <option value="4">4 clusters</option>
-        <option value="5" selected>5 clusters</option>
-        <option value="6">6 clusters</option>
-        <option value="7">7 clusters</option>
-        <option value="8">8 clusters</option>
-        <option value="9">9 clusters</option>
-        <option value="10">10 clusters</option>
-        <option value="11">11 clusters</option>
-        <option value="12">12 clusters</option>
-        <option value="13">13 clusters</option>
-        <option value="14">14 clusters</option>
-        <option value="15">15 clusters</option>
-        <option value="20">20 clusters</option>
-    </select>
-    
-    <div class="checkbox-group">
-        <label><input type="checkbox" id="includeHistogram"> Include Histogram Data</label>
-        <label><input type="checkbox" id="includePixel"> Include Pixel Data</label>
+  </details>
+
+  <!-- Form -->
+  <div class="card">
+    <div class="card-title">Configuration</div>
+    <div class="form-grid">
+
+      <div class="field full-width">
+        <label for="imageUrl">Image URLs (one per line)</label>
+        <textarea id="imageUrl" rows="5"
+          placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg&#10;https://example.com/image3.png"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="precision">Analysis Precision</label>
+        <select id="precision">
+          <option value="vlow">Very Low (50px) — Fastest</option>
+          <option value="low">Low (75px) — Fast</option>
+          <option value="medium" selected>Medium (100px) — Balanced</option>
+          <option value="high">High (150px) — Detailed</option>
+          <option value="vhigh">Very High (200px) — Most Detailed</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="numClusters">Colour Clusters</label>
+        <select id="numClusters">
+          <option value="0">No clustering</option>
+          <option value="2">2 clusters</option>
+          <option value="3">3 clusters</option>
+          <option value="4">4 clusters</option>
+          <option value="5" selected>5 clusters</option>
+          <option value="6">6 clusters</option>
+          <option value="7">7 clusters</option>
+          <option value="8">8 clusters</option>
+          <option value="9">9 clusters</option>
+          <option value="10">10 clusters</option>
+          <option value="11">11 clusters</option>
+          <option value="12">12 clusters</option>
+          <option value="13">13 clusters</option>
+          <option value="14">14 clusters</option>
+          <option value="15">15 clusters</option>
+          <option value="20">20 clusters</option>
+        </select>
+      </div>
+
+      <div class="field full-width">
+        <div class="checkbox-row">
+          <label><input type="checkbox" id="includeHistogram"> Include Histogram Data</label>
+          <label><input type="checkbox" id="includePixel"> Include Pixel Data</label>
+        </div>
+      </div>
+
     </div>
-    
-    <button id="analyzeBtn" onclick="analyzeImages()">🚀 Analyze Images and Download Data</button>
-    
-    <div id="results"></div>
-    <div id="debug"></div>
-    <p>Credit: this batch processing tool accesses the <a href="https://mk.bcgsc.ca/color-summarizer/?api">Image Color Summarizer API</a>, created by <a href=" https://mk.bcgsc.ca/"> Martin Krzywinski </a>. This tool was created for educational instruction purposes by <a href="https://jcinnamon.github.io/">Jonathan Cinnamon</a>, 2024.</p>
 
-    <script>
-        // Cloudflare Worker URL - hardcoded
-        const WORKER_URL = 'https://color-summarizer-proxy.snowy-shadow-118c.workers.dev';
-        
-        async function analyzeImages() {
-            const imageUrls = document.getElementById('imageUrl').value.trim().split('\n').filter(url => url.trim());
-            const resultsDiv = document.getElementById('results');
-            const debugDiv = document.getElementById('debug');
-            const analyzeBtn = document.getElementById('analyzeBtn');
-            
-            // Clear previous results
-            resultsDiv.innerHTML = '';
-            debugDiv.innerHTML = '';
-            
-            // Validation
-            if (imageUrls.length === 0) {
-                resultsDiv.innerHTML = '<div class="error">❌ Please enter at least one image URL</div>';
-                return;
-            }
-            
-            // Validate URLs
-            const invalidUrls = [];
-            const validUrls = [];
-            
-            imageUrls.forEach(url => {
-                if (!isValidImageUrl(url)) {
-                    invalidUrls.push(url);
-                } else {
-                    validUrls.push(url);
-                }
-            });
-            
-            if (invalidUrls.length > 0) {
-                resultsDiv.innerHTML += `<div class="warning">⚠️ Warning: ${invalidUrls.length} URL(s) may not be valid image links:<ul>`;
-                invalidUrls.forEach(url => {
-                    resultsDiv.innerHTML += `<li>${escapeHtml(url)}</li>`;
-                });
-                resultsDiv.innerHTML += '</ul>These will still be attempted, but may fail.</div>';
-            }
-            
-            if (validUrls.length === 0) {
-                resultsDiv.innerHTML += '<div class="error">❌ No valid image URLs found. Please check your URLs.</div>';
-                return;
-            }
-            
-            analyzeBtn.disabled = true;
-            debugDiv.innerHTML = 'Starting analysis...\n';
+    <div class="actions">
+      <button id="analyzeBtn" class="btn btn-primary" onclick="analyzeImages()">Analyse Images</button>
+      <button id="debugToggle" class="btn btn-outline" onclick="toggleDebug()" style="display:none">Show log</button>
+    </div>
+  </div>
 
-            const blobParts = [];
-            let isFirstImage = true;
-            let successCount = 0;
-            let failCount = 0;
-            const errors = [];
+  <!-- Status -->
+  <div id="statusArea"></div>
 
-            for (let i = 0; i < imageUrls.length; i++) {
-                const url = imageUrls[i].trim();
-                try {
-                    resultsDiv.innerHTML = `<div class="progress">⏳ Analyzing image ${i + 1} of ${imageUrls.length}...<br>URL: ${escapeHtml(url)}</div>`;
-                    debugDiv.innerHTML += `\n[${i + 1}/${imageUrls.length}] Requesting: ${url}\n`;
-                    
-                    const result = await analyzeImage(url);
-                    
-                    // Check if result contains an error message
-                    if (result.includes('*** ERROR ***')) {
-                        const errorMsg = extractErrorMessage(result);
-                        throw new Error(errorMsg || 'API returned an error');
-                    }
-                    
-                    const processedResult = processResult(result, url, isFirstImage);
-                    blobParts.push(processedResult);
-                    successCount++;
-                    isFirstImage = false;
-                    
-                    debugDiv.innerHTML += `✓ Success\n`;
-                } catch (error) {
-                    failCount++;
-                    const errorMsg = error.message || 'Unknown error';
-                    errors.push({url: url, error: errorMsg});
-                    debugDiv.innerHTML += `✗ Error: ${errorMsg}\n`;
-                    console.error('Error details:', error);
-                }
-            }
+  <!-- Results -->
+  <div id="results"></div>
 
-            // Display summary
-            resultsDiv.innerHTML = '<div class="summary"><h3>Analysis Complete</h3>';
-            
-            if (successCount > 0) {
-                resultsDiv.innerHTML += `<div class="success">✓ Successfully analyzed: ${successCount} image(s)</div>`;
-            }
-            
-            if (failCount > 0) {
-                resultsDiv.innerHTML += `<div class="error">✗ Failed: ${failCount} image(s)</div>`;
-                resultsDiv.innerHTML += '<h4>Error Details:</h4>';
-                errors.forEach(e => {
-                    resultsDiv.innerHTML += `<div class="image-result">`;
-                    resultsDiv.innerHTML += `<h4>❌ ${escapeHtml(e.url)}</h4>`;
-                    resultsDiv.innerHTML += `<p><strong>Error:</strong> ${escapeHtml(e.error)}</p>`;
-                    resultsDiv.innerHTML += getSuggestions(e.error);
-                    resultsDiv.innerHTML += `</div>`;
-                });
-            }
-            
-            resultsDiv.innerHTML += '</div>';
+  <!-- Debug log -->
+  <div id="debug"></div>
 
-            if (blobParts.length > 0) {
-                const blob = new Blob(blobParts, { type: 'text/tab-separated-values' });
-                downloadTSV(blob, 'color_summary_all.tsv');
-                resultsDiv.innerHTML += '<div class="success">📥 TSV file downloaded successfully!</div>';
-            } else {
-                resultsDiv.innerHTML += '<div class="error">❌ No data to download. All analyses failed.</div>';
-            }
-            
-            analyzeBtn.disabled = false;
-        }
+</div>
 
-        function isValidImageUrl(url) {
-            try {
-                const urlObj = new URL(url);
-                const path = urlObj.pathname.toLowerCase();
-                return path.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i) !== null;
-            } catch (e) {
-                return false;
-            }
-        }
+<footer class="page-footer">
+  Credit: this tool accesses the <a href="https://mk.bcgsc.ca/color-summarizer/?api">Image Color Summarizer API</a> by <a href="https://mk.bcgsc.ca/">Martin Krzywinski</a>. Created for educational instruction by <a href="https://jcinnamon.github.io/">Jonathan Cinnamon</a>, 2024.
+</footer>
 
-        function extractErrorMessage(result) {
-            const match = result.match(/\*\*\* ERROR \*\*\*\s*(.*?)(?:\n|$)/);
-            if (match) {
-                return match[1].trim();
-            }
-            return null;
-        }
+<script>
+const WORKER_URL = 'https://color-summarizer-proxy.snowy-shadow-118c.workers.dev';
 
-        function getSuggestions(errorMsg) {
-            let suggestions = '<div style="margin-top: 10px;"><strong>Suggestions:</strong><ul>';
-            
-            if (errorMsg.includes('does not point to an image')) {
-                suggestions += '<li>Ensure the URL is a direct link to an image file (ending in .jpg, .png, etc.)</li>';
-                suggestions += '<li>Right-click the image and select "Copy Image Address" to get the direct URL</li>';
-                suggestions += '<li>Avoid URLs that point to web pages containing images</li>';
-            } else if (errorMsg.includes('HTTP error')) {
-                suggestions += '<li>Check that the image URL is publicly accessible</li>';
-                suggestions += '<li>Verify the URL is correct and the image still exists</li>';
-                suggestions += '<li>Try accessing the URL directly in your browser</li>';
-            } else if (errorMsg.includes('Failed to fetch')) {
-                suggestions += '<li>Check your internet connection</li>';
-                suggestions += '<li>The Color Summarizer API may be temporarily unavailable</li>';
-                suggestions += '<li>Try again in a few moments</li>';
-            } else {
-                suggestions += '<li>Verify the image URL is publicly accessible</li>';
-                suggestions += '<li>Check that the URL points to a valid image file</li>';
-                suggestions += '<li>Try a different image to rule out API issues</li>';
-            }
-            
-            suggestions += '</ul></div>';
-            return suggestions;
-        }
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+function escapeHtml(text) {
+  const d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
+}
 
-        async function analyzeImage(imageUrl) {
-            const params = new URLSearchParams({
-                url: imageUrl,
-                precision: document.getElementById('precision').value,
-                num_clusters: document.getElementById('numClusters').value,
-                histogram: document.getElementById('includeHistogram').checked ? '1' : '0',
-                pixel: document.getElementById('includePixel').checked ? '1' : '0'
-            });
+function isValidImageUrl(url) {
+  try {
+    return /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(new URL(url).pathname);
+  } catch { return false; }
+}
 
-            const fullUrl = `${WORKER_URL}?${params}`;
+function extractErrorMessage(result) {
+  const m = result.match(/\*\*\* ERROR \*\*\*\s*(.*?)(?:\n|$)/);
+  return m ? m[1].trim() : null;
+}
 
-            const response = await fetch(fullUrl);
-            const text = await response.text();
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} - ${text}`);
-            }
-            
-            return text;
-        }
+function setStatus(html, type = '') {
+  document.getElementById('statusArea').innerHTML =
+    html ? `<div class="status-bar status-${type}">${html}</div>` : '';
+}
 
-        function processResult(result, imageUrl, isFirstImage) {
-            const lines = result.split('\n');
-            let output = '';
+function log(msg) {
+  const d = document.getElementById('debug');
+  d.textContent += msg + '\n';
+  d.scrollTop = d.scrollHeight;
+}
 
-            if (isFirstImage) {
-                output += 'Image URL\t' + lines[0] + '\n';
-            }
+function toggleDebug() {
+  const d   = document.getElementById('debug');
+  const btn = document.getElementById('debugToggle');
+  btn.textContent = d.classList.toggle('visible') ? 'Hide log' : 'Show log';
+}
 
-            output += lines.slice(1).filter(line => line.trim()).map(line => `${imageUrl}\t${line}`).join('\n') + '\n';
-            return output;
-        }
+// ── Colour parsing ────────────────────────────────────────────────────────────
 
-        function downloadTSV(blob, fileName) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-    </script>
+function parseColors(tsvText) {
+  const lines = tsvText.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split('\t').map(h => h.trim().toLowerCase());
+  const hexIdx  = headers.indexOf('hex');
+  const fracIdx = headers.indexOf('fraction');
+  if (hexIdx === -1) return [];
+  return lines.slice(1)
+    .map(line => {
+      const cols = line.split('\t');
+      return {
+        hex:      '#' + (cols[hexIdx] || '').trim(),
+        fraction: fracIdx !== -1 ? (parseFloat(cols[fracIdx]) || 0) : 0,
+      };
+    })
+    .filter(c => /^#[0-9a-f]{3,6}$/i.test(c.hex));
+}
+
+function renderSwatches(colors) {
+  if (!colors.length) return '';
+  const sorted = [...colors].sort((a, b) => b.fraction - a.fraction);
+  return sorted.map((c, i) => {
+    const pct = (c.fraction * 100).toFixed(1) + '%';
+    // Height scales with coverage: dominant is taller
+    const h = Math.round(28 + c.fraction * 52);
+    return `
+      <div class="swatch${i === 0 ? ' dominant' : ''}" title="${c.hex} — ${pct}">
+        <div class="swatch-block" style="height:${h}px;background:${c.hex}"></div>
+        <div class="swatch-pct">${pct}</div>
+        <div class="swatch-hex">${c.hex}</div>
+      </div>`;
+  }).join('');
+}
+
+function getSuggestions(errorMsg) {
+  const items = [];
+  if (errorMsg.includes('does not point to an image')) {
+    items.push('URL must end in .jpg, .jpeg, or .png — right-click the image and choose "Copy Image Address"');
+    items.push('Avoid URLs pointing to web pages rather than image files');
+  } else if (errorMsg.includes('HTTP error')) {
+    items.push('Check the image URL is publicly accessible');
+    items.push('Open the URL directly in your browser to verify it loads');
+  } else if (errorMsg.includes('Failed to fetch')) {
+    items.push('Check your internet connection');
+    items.push('The Colour Summarizer API may be temporarily unavailable — try again shortly');
+  } else {
+    items.push('Verify the URL points to a valid, publicly accessible image file');
+    items.push('Try a different image to rule out API issues');
+  }
+  return `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
+}
+
+// ── TSV processing ────────────────────────────────────────────────────────────
+
+function processResult(result, imageUrl, isFirstImage) {
+  const lines = result.split('\n');
+  let out = '';
+  if (isFirstImage) out += 'Image URL\t' + lines[0] + '\n';
+  out += lines.slice(1).filter(l => l.trim()).map(l => `${imageUrl}\t${l}`).join('\n') + '\n';
+  return out;
+}
+
+function downloadTSV(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a   = Object.assign(document.createElement('a'), { href: url, download: fileName });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── API call ──────────────────────────────────────────────────────────────────
+
+async function analyzeImage(imageUrl) {
+  const params = new URLSearchParams({
+    url:          imageUrl,
+    precision:    document.getElementById('precision').value,
+    num_clusters: document.getElementById('numClusters').value,
+    histogram:    document.getElementById('includeHistogram').checked ? '1' : '0',
+    pixel:        document.getElementById('includePixel').checked     ? '1' : '0',
+  });
+  const resp = await fetch(`${WORKER_URL}?${params}`);
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`HTTP error ${resp.status} — ${text}`);
+  return text;
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+async function analyzeImages() {
+  const rawUrls    = document.getElementById('imageUrl').value.trim().split('\n');
+  const imageUrls  = rawUrls.map(u => u.trim()).filter(Boolean);
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const debugToggle = document.getElementById('debugToggle');
+
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('debug').textContent = '';
+  document.getElementById('debug').classList.remove('visible');
+  debugToggle.style.display = 'none';
+  setStatus('');
+
+  if (!imageUrls.length) {
+    setStatus('Please enter at least one image URL.', 'error');
+    return;
+  }
+
+  const invalid = imageUrls.filter(u => !isValidImageUrl(u));
+  if (invalid.length) {
+    setStatus(`${invalid.length} URL(s) may not be direct image links and could fail.`, 'warning');
+  }
+
+  analyzeBtn.disabled = true;
+
+  const blobParts   = [];
+  const cards       = [];
+  let isFirstImage  = true;
+  let successCount  = 0;
+  let failCount     = 0;
+
+  for (let i = 0; i < imageUrls.length; i++) {
+    const url = imageUrls[i];
+    setStatus(`Analysing image ${i + 1} of ${imageUrls.length}…`, 'progress');
+    log(`[${i + 1}/${imageUrls.length}] ${url}`);
+
+    try {
+      const result = await analyzeImage(url);
+      if (result.includes('*** ERROR ***')) {
+        throw new Error(extractErrorMessage(result) || 'API returned an error');
+      }
+      blobParts.push(processResult(result, url, isFirstImage));
+      const colors = parseColors(result);
+      cards.push({ url, ok: true, colors });
+      successCount++;
+      isFirstImage = false;
+      log(`  ✓ ${colors.length} colour(s) parsed`);
+    } catch (err) {
+      failCount++;
+      cards.push({ url, ok: false, error: err.message || 'Unknown error' });
+      log(`  ✗ ${err.message}`);
+    }
+  }
+
+  // Summary bar
+  let html = `<div class="summary-bar">
+    <div class="summary-stat">Analysed <b>${imageUrls.length}</b> image${imageUrls.length !== 1 ? 's' : ''}</div>`;
+  if (successCount) html += `<div class="summary-stat"><b>${successCount}</b> succeeded</div>`;
+  if (failCount)    html += `<div class="summary-stat fail"><b>${failCount}</b> failed</div>`;
+  if (blobParts.length) html += `<div class="right"><button class="btn btn-outline" onclick="redownload()">⬇ Download TSV</button></div>`;
+  html += `</div>`;
+
+  // Image cards
+  html += cards.map(card => {
+    const shortUrl = card.url.length > 72 ? '…' + card.url.slice(-68) : card.url;
+    if (card.ok) {
+      return `
+        <div class="image-card is-success">
+          <div class="image-card-header">
+            <img class="thumb" src="${escapeHtml(card.url)}" alt=""
+              onerror="this.outerHTML='<div class=&quot;thumb-placeholder&quot;>🖼</div>'">
+            <div class="image-card-meta">
+              <div class="status-badge badge-success">✓ Analysed</div>
+              <div class="img-url">${escapeHtml(shortUrl)}</div>
+            </div>
+          </div>
+          ${card.colors.length ? `<div class="swatches">${renderSwatches(card.colors)}</div>` : ''}
+        </div>`;
+    } else {
+      return `
+        <div class="image-card is-error">
+          <div class="image-card-header">
+            <div class="thumb-placeholder">❌</div>
+            <div class="image-card-meta">
+              <div class="status-badge badge-error">Failed</div>
+              <div class="img-url">${escapeHtml(shortUrl)}</div>
+            </div>
+          </div>
+          <div class="error-detail">
+            <strong>Error:</strong> ${escapeHtml(card.error)}
+            ${getSuggestions(card.error)}
+          </div>
+        </div>`;
+    }
+  }).join('');
+
+  document.getElementById('results').innerHTML = html;
+
+  if (blobParts.length) {
+    window._tsvBlob = new Blob(blobParts, { type: 'text/tab-separated-values' });
+    downloadTSV(window._tsvBlob, 'color_summary_all.tsv');
+    setStatus('Analysis complete. TSV downloaded.', 'success');
+  } else {
+    setStatus('Analysis complete — all images failed. Check the log for details.', 'error');
+  }
+
+  debugToggle.style.display = '';
+  analyzeBtn.disabled = false;
+}
+
+function redownload() {
+  if (window._tsvBlob) downloadTSV(window._tsvBlob, 'color_summary_all.tsv');
+}
+</script>
 </body>
 </html>
