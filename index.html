@@ -305,6 +305,62 @@
     .swatch-pct { font-size: 0.7rem; font-weight: 600; color: var(--text); text-align: center; }
     .swatch-hex { font-size: 0.63rem; font-family: monospace; color: var(--text-muted); text-align: center; }
 
+    /* ── Compact results mode ────────────────────────────────── */
+    #results.compact .metric-row,
+    #results.compact .exif-line,
+    #results.compact .hist-details,
+    #results.compact .swatch-pct,
+    #results.compact .swatch-hex { display: none; }
+    #results.compact .image-card { margin-bottom: 0.35rem; }
+    #results.compact .image-card-header { padding: 0.35rem 0.9rem; border-bottom: none; }
+    #results.compact .thumb, #results.compact .thumb-placeholder {
+      width: 30px; height: 30px; font-size: 0.9rem;
+    }
+    #results.compact .status-badge { display: none; }
+    #results.compact .swatches { padding: 0 1rem 0.45rem; gap: 3px; }
+    #results.compact .swatch-block { height: 18px !important; width: 26px; }
+
+    /* ── Histograms ──────────────────────────────────────────── */
+    .hist-details { border-top: 1px solid var(--border); }
+    .hist-details summary {
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      padding: 0.45rem 1rem;
+      list-style: none;
+    }
+    .hist-details summary::before { content: '▶ '; font-size: 0.6rem; opacity: 0.6; }
+    .hist-details[open] summary::before { content: '▼ '; }
+    .hist-body { padding: 0 1rem 0.9rem; }
+    .hist-controls {
+      display: flex; align-items: center; gap: 4px;
+      margin-bottom: 0.5rem; flex-wrap: wrap;
+    }
+    .hist-btn {
+      border: 1px solid var(--border);
+      background: var(--bg-white);
+      color: var(--text-muted);
+      border-radius: 999px;
+      padding: 2px 12px;
+      font-family: var(--font);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .hist-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .hist-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+    .hist-canvas {
+      width: 100%;
+      max-width: 660px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-white);
+      display: block;
+    }
+
     /* ── Error detail ────────────────────────────────────────── */
     .error-detail { padding: 0.7rem 0.9rem; font-size: 0.82rem; color: var(--danger); }
     .error-detail ul { margin: 0.4rem 0 0 1.1rem; color: var(--text-muted); }
@@ -618,6 +674,8 @@ function imageMetrics(pixels) {
   let warm = 0, cool = 0, neutral = 0;
   let sumRg = 0, sumYb = 0, sumRg2 = 0, sumYb2 = 0;
   const hueBins = new Float64Array(36);
+  const satBins = new Float64Array(20);
+  const valBins = new Float64Array(20);
   let hueBinN = 0;
 
   for (let i = 0; i < n; i++) {
@@ -626,6 +684,8 @@ function imageMetrics(pixels) {
 
     const [h, s, v] = rgbToHsv(r, g, b);
     sumS += s; sumV += v;
+    satBins[Math.min(19, Math.floor(s / 5))]++;
+    valBins[Math.min(19, Math.floor(v / 5))]++;
 
     // Circular hue statistics + warm/cool (chromatic pixels only)
     if (s >= 10 && v >= 10) {
@@ -682,6 +742,8 @@ function imageMetrics(pixels) {
     warm_pct: pct(warm), cool_pct: pct(cool), neutral_pct: pct(neutral),
     hue_entropy: entropy,
     hue_bins: Array.from(hueBins),
+    sat_bins: Array.from(satBins),
+    val_bins: Array.from(valBins),
     chromatic_n: hueBinN,
   };
 }
@@ -916,8 +978,12 @@ function analyzePixels(rgba, w, h, opts) {
 
 // ── State ───────────────────────────────────────────────────────────
 let queuedFiles = [];      // File objects
+let filesCollapsed = null; // null = auto (collapse when >12 files)
+let compactResults = false;
 window._results = [];      // successful analyses
 window._paletteData = {};  // per-card palette render data
+window._histModes = {};    // per-histogram H/S/V mode ('all' = dataset panel)
+window._lastRender = null; // args of last renderResults call
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function escapeHtml(text) {
@@ -988,15 +1054,30 @@ function removeFile(idx) {
 function renderFilePills() {
   const el = document.getElementById('filePills');
   if (!queuedFiles.length) { el.innerHTML = ''; return; }
-  el.innerHTML = queuedFiles.map((f, i) =>
-    `<span class="file-pill">${escapeHtml(f.name)} <button onclick="removeFile(${i})" title="Remove">×</button></span>`
-  ).join('') + `<span class="file-pill"><b>${queuedFiles.length}</b>&nbsp;file(s) queued</span>`;
+  const collapsed = filesCollapsed === null ? queuedFiles.length > 12 : filesCollapsed;
+  const summary = `<span class="file-pill"><b>${queuedFiles.length}</b>&nbsp;file(s) queued</span>` +
+    `<button class="btn btn-outline btn-sm" onclick="toggleFilePills()">${collapsed ? 'Show filenames' : 'Hide filenames'}</button>`;
+  el.innerHTML = collapsed
+    ? summary
+    : queuedFiles.map((f, i) =>
+        `<span class="file-pill">${escapeHtml(f.name)} <button onclick="removeFile(${i})" title="Remove">×</button></span>`
+      ).join('') + summary;
+}
+
+function toggleFilePills() {
+  const collapsed = filesCollapsed === null ? queuedFiles.length > 12 : filesCollapsed;
+  filesCollapsed = !collapsed;
+  renderFilePills();
 }
 
 function clearAll() {
   queuedFiles = [];
+  filesCollapsed = null;
   window._results = [];
   window._paletteData = {};
+  window._histModes = {};
+  window._lastRender = null;
+  document.getElementById('results').classList.remove('compact');
   renderFilePills();
   document.getElementById('imageUrl').value = '';
   document.getElementById('results').innerHTML = '';
@@ -1145,12 +1226,14 @@ async function analyzeImages() {
 
 // ── Rendering ───────────────────────────────────────────────────────
 function renderResults(cards, total, ok, failed, opts) {
+  window._lastRender = { cards, total, ok, failed, opts };
   let html = `<div class="summary-bar">
     <div class="summary-stat">Analysed <b>${total}</b> image${total !== 1 ? 's' : ''}</div>`;
   if (ok)     html += `<div class="summary-stat"><b>${ok}</b> succeeded</div>`;
   if (failed) html += `<div class="summary-stat fail"><b>${failed}</b> failed</div>`;
   if (ok) {
     html += `<div class="right">`;
+    html += `<button class="btn btn-outline btn-sm" id="compactToggle" onclick="toggleCompact()">${compactResults ? 'Detailed view' : 'Compact view'}</button>`;
     if (opts.numClusters >= 2)
       html += `<button class="btn btn-outline btn-sm" onclick="downloadClusterCSV()">⬇ Clusters CSV</button>`;
     html += `<button class="btn btn-outline btn-sm" onclick="downloadImageCSV()">⬇ Image summary CSV</button>`;
@@ -1161,6 +1244,15 @@ function renderResults(cards, total, ok, failed, opts) {
     html += `</div>`;
   }
   html += `</div>`;
+
+  // Dataset-level histogram panel
+  if (ok) {
+    html += `<div class="card" style="padding:0.8rem 1rem 1rem">
+      <div class="card-title" style="margin-bottom:0.55rem">Dataset histogram — all analysed images</div>
+      <div class="hist-controls" id="histctl-all">${histControlsHtml('all')}</div>
+      <canvas id="hist-all" class="hist-canvas" width="660" height="200"></canvas>
+    </div>`;
+  }
 
   html += cards.map(card => {
     if (!card.ok) {
@@ -1210,10 +1302,27 @@ function renderResults(cards, total, ok, failed, opts) {
         </div>
         <div class="metric-row">${chips.map(c => `<span class="metric-chip">${c}</span>`).join('')}</div>
         ${r.clusters.length ? `<div class="swatches">${renderSwatches(r.clusters)}</div>` : '<div style="padding:0.6rem"></div>'}
+        <details class="hist-details" ontoggle="if (this.open) drawHist('${r.id}')">
+          <summary>H/S/V histogram</summary>
+          <div class="hist-body">
+            <div class="hist-controls" id="histctl-${r.id}">${histControlsHtml(String(r.id))}</div>
+            <canvas id="hist-${r.id}" class="hist-canvas" width="660" height="200"></canvas>
+          </div>
+        </details>
       </div>`;
   }).join('');
 
-  document.getElementById('results').innerHTML = html;
+  const resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = html;
+  resultsEl.classList.toggle('compact', compactResults);
+  if (ok) drawHist('all');
+}
+
+function toggleCompact() {
+  compactResults = !compactResults;
+  document.getElementById('results').classList.toggle('compact', compactResults);
+  const btn = document.getElementById('compactToggle');
+  if (btn) btn.textContent = compactResults ? 'Detailed view' : 'Compact view';
 }
 
 function renderSwatches(clusters) {
@@ -1227,6 +1336,128 @@ function renderSwatches(clusters) {
         <div class="swatch-hex">${c.hex}</div>
       </div>`;
   }).join('');
+}
+
+// ── H/S/V histograms ────────────────────────────────────────────────
+const HIST_MODES = { hue: 'Hue', sat: 'Saturation', val: 'Value' };
+
+function histControlsHtml(id) {
+  const mode = window._histModes[id] || 'hue';
+  const btns = Object.entries(HIST_MODES).map(([m, lbl]) =>
+    `<button class="hist-btn${mode === m ? ' active' : ''}" onclick="setHistMode('${id}','${m}')">${lbl}</button>`
+  ).join('');
+  return btns + `<button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="downloadHistPNG('${id}')">⬇ PNG</button>`;
+}
+
+function setHistMode(id, mode) {
+  window._histModes[id] = mode;
+  const ctl = document.getElementById('histctl-' + id);
+  if (ctl) ctl.innerHTML = histControlsHtml(id);
+  drawHist(id);
+}
+
+// Returns { bins, denom, mode, title } for a card id (string) or 'all'
+function histData(id) {
+  const mode = window._histModes[id] || 'hue';
+  const key = mode === 'hue' ? 'hue_bins' : mode === 'sat' ? 'sat_bins' : 'val_bins';
+  if (id === 'all') {
+    const nB = mode === 'hue' ? 36 : 20;
+    const bins = new Array(nB).fill(0);
+    let denom = 0;
+    for (const r of window._results) {
+      r.metrics[key].forEach((v, i) => { bins[i] += v; });
+      denom += mode === 'hue' ? (r.metrics.chromatic_n || 0) : r.metrics.analyzed_pixels;
+    }
+    return { bins, denom, mode, title: `All images (${window._results.length}) — ${HIST_MODES[mode]}` };
+  }
+  const r = window._results.find(x => String(x.id) === String(id));
+  if (!r) return null;
+  return {
+    bins: r.metrics[key],
+    denom: mode === 'hue' ? (r.metrics.chromatic_n || 0) : r.metrics.analyzed_pixels,
+    mode,
+    title: `${r.filename} — ${HIST_MODES[mode]}`,
+  };
+}
+
+function histBarColor(mode, i, nBins) {
+  if (mode === 'hue') return `hsl(${i * 10 + 5}, 78%, 50%)`;
+  if (mode === 'sat') return `hsl(168, ${Math.round(((i + 0.5) / nBins) * 100)}%, 42%)`;
+  return `hsl(0, 0%, ${Math.round(((i + 0.5) / nBins) * 88 + 4)}%)`;
+}
+
+function drawHist(id) {
+  const data = histData(id);
+  const canvas = document.getElementById('hist-' + id);
+  if (!data || !canvas) return;
+  const { bins, denom, mode, title } = data;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const mL = 38, mR = 8, mT = 26, mB = 30;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1a2332';
+  ctx.font = '600 12px Inter, sans-serif';
+  ctx.fillText(title, mL, 16);
+
+  if (!denom) {
+    ctx.fillStyle = '#6b7a8d';
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillText(mode === 'hue' ? 'No chromatic pixels (image is greyscale/neutral)' : 'No data', mL, mT + plotH / 2);
+    return;
+  }
+
+  const pcts = bins.map(b => (b / denom) * 100);
+  const maxPct = Math.max(1, ...pcts);
+  const n = bins.length;
+  const barW = plotW / n;
+
+  // Bars
+  for (let i = 0; i < n; i++) {
+    const bh = (pcts[i] / maxPct) * plotH;
+    ctx.fillStyle = histBarColor(mode, i, n);
+    ctx.fillRect(mL + i * barW + 1, mT + plotH - bh, Math.max(1, barW - 2), bh);
+  }
+
+  // Axes
+  ctx.strokeStyle = '#dde8ed';
+  ctx.beginPath();
+  ctx.moveTo(mL, mT); ctx.lineTo(mL, mT + plotH); ctx.lineTo(mL + plotW, mT + plotH);
+  ctx.stroke();
+
+  ctx.fillStyle = '#6b7a8d';
+  ctx.font = '10px Inter, sans-serif';
+  // Y labels: 0 and max
+  ctx.textAlign = 'right';
+  ctx.fillText('0%', mL - 4, mT + plotH + 3);
+  ctx.fillText(maxPct.toFixed(1) + '%', mL - 4, mT + 8);
+  // X labels
+  ctx.textAlign = 'center';
+  if (mode === 'hue') {
+    for (let d = 0; d <= 360; d += 60)
+      ctx.fillText(d + '°', mL + (d / 360) * plotW, mT + plotH + 14);
+    ctx.fillText('hue (chromatic pixels only)', mL + plotW / 2, mT + plotH + 27);
+  } else {
+    for (let d = 0; d <= 100; d += 25)
+      ctx.fillText(String(d), mL + (d / 100) * plotW, mT + plotH + 14);
+    ctx.fillText(mode === 'sat' ? 'saturation (0–100, all pixels)' : 'value / brightness (0–100, all pixels)', mL + plotW / 2, mT + plotH + 27);
+  }
+  ctx.textAlign = 'left';
+}
+
+function downloadHistPNG(id) {
+  drawHist(id); // ensure current
+  const canvas = document.getElementById('hist-' + id);
+  if (!canvas) return;
+  const mode = window._histModes[id] || 'hue';
+  let name = 'dataset';
+  if (id !== 'all') {
+    const r = window._results.find(x => String(x.id) === String(id));
+    if (r) name = stripExt(r.filename);
+  }
+  canvas.toBlob(blob => downloadBlob(blob, `${name}_histogram-${mode}.png`), 'image/png');
 }
 
 // ── Palette PNG export ──────────────────────────────────────────────
