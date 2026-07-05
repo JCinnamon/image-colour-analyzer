@@ -5,16 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Batch Image Colour Analyzer</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-<meta name="description" content="Analzse colour properties in large image datasets. Built for visual methods and urban imagery research. Exports as CSV.">
-<meta property="og:title" content="Image Colour Analyzer">
-<meta property="og:description" content="Analyze pixel and cluster colours in large image datasets. Paste image URLs, set clustering options, and download a CSV summary.">
-<meta property="og:url" content="https://www.jonathancinnamon.com/image-colour-analyzer/">
-<meta property="og:type" content="website">
-<link rel="canonical" href="https://www.jonathancinnamon.com/image-colour-analyzer/">
-  
-  <script data-goatcounter="https://jcinnamon.goatcounter.com/count"
-        async src="//gc.zgo.at/count.js"></script>
   <style>
     :root {
       --primary:       #2c5f7a;
@@ -54,23 +44,11 @@
       padding: 0.9rem 1.5rem;
       box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
-    .page-header h1 {
-      font-size: 1rem;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-    .page-header p {
-      font-size: 0.78rem;
-      opacity: 0.72;
-      margin-top: 2px;
-    }
+    .page-header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+    .page-header p  { font-size: 0.78rem; opacity: 0.72; margin-top: 2px; }
 
     /* ── Layout ──────────────────────────────────────────────── */
-    .page-body {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 1.25rem 1.5rem;
-    }
+    .page-body { max-width: 960px; margin: 0 auto; padding: 1.25rem 1.5rem; }
 
     /* ── Card ────────────────────────────────────────────────── */
     .card {
@@ -106,30 +84,54 @@
       user-select: none;
       list-style: none;
     }
-    .info-box summary::before {
-      content: '▶ ';
-      font-size: 0.65rem;
-      opacity: 0.6;
-    }
+    .info-box summary::before { content: '▶ '; font-size: 0.65rem; opacity: 0.6; }
     details[open] .info-box summary::before { content: '▼ '; }
-    .info-box ul {
-      margin: 0.55rem 0 0 1.1rem;
-      color: var(--text);
-    }
+    .info-box ul { margin: 0.55rem 0 0 1.1rem; color: var(--text); }
     .info-box ul li { margin-bottom: 3px; }
-    .info-box .examples {
-      margin-top: 0.5rem;
-      font-family: monospace;
-      font-size: 0.77rem;
+
+    /* ── Drop zone ────────────────────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 1.4rem 1rem;
+      text-align: center;
       color: var(--text-muted);
+      font-size: 0.84rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+    .drop-zone b { color: var(--accent); }
+    .drop-zone .sub { font-size: 0.73rem; opacity: 0.8; margin-top: 3px; }
+
+    .file-pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 0.6rem;
+    }
+    .file-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 0.72rem;
+      font-family: monospace;
+      color: var(--text-muted);
+    }
+    .file-pill button {
+      border: none; background: none; cursor: pointer;
+      color: var(--danger); font-size: 0.8rem; line-height: 1;
     }
 
     /* ── Form ────────────────────────────────────────────────── */
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
     .form-grid .full-width { grid-column: 1 / -1; }
 
     .field label {
@@ -139,6 +141,7 @@
       color: var(--text-muted);
       margin-bottom: 4px;
     }
+    .field .hint { font-size: 0.68rem; color: var(--text-muted); opacity: 0.8; margin-top: 3px; }
 
     textarea, select {
       width: 100%;
@@ -153,29 +156,14 @@
       transition: border-color 0.15s;
     }
     textarea:focus, select:focus { border-color: var(--accent); }
-    textarea {
-      font-family: monospace;
-      font-size: 0.78rem;
-      resize: vertical;
-    }
+    textarea { font-family: monospace; font-size: 0.78rem; resize: vertical; }
 
-    .checkbox-row {
-      display: flex;
-      gap: 1.5rem;
-      align-items: center;
-    }
+    .checkbox-row { display: flex; gap: 1.4rem; align-items: center; flex-wrap: wrap; }
     .checkbox-row label {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.82rem;
-      cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.82rem; cursor: pointer;
     }
-    input[type="checkbox"] {
-      accent-color: var(--accent);
-      width: 14px;
-      height: 14px;
-    }
+    input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
 
     /* ── Buttons ─────────────────────────────────────────────── */
     .btn {
@@ -194,34 +182,21 @@
     .btn-primary { background: var(--accent); color: white; }
     .btn-primary:hover { background: var(--accent-hover); }
     .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-    .btn-outline {
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-    }
+    .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
     .btn-outline:hover { background: var(--accent-light); }
+    .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.75rem; }
 
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      flex-wrap: wrap;
-      margin-top: 0.75rem;
-    }
+    .actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.75rem; }
 
     /* ── Status bar ──────────────────────────────────────────── */
     #statusArea { margin-bottom: 0.9rem; }
-    .status-bar {
-      padding: 0.55rem 0.9rem;
-      border-radius: var(--radius);
-      font-size: 0.82rem;
-    }
+    .status-bar { padding: 0.55rem 0.9rem; border-radius: var(--radius); font-size: 0.82rem; }
     .status-progress { background: var(--warning-bg); border-left: 3px solid var(--warning-border); color: #7a5500; }
     .status-success  { background: var(--success-bg); border-left: 3px solid var(--accent); color: var(--accent); }
     .status-error    { background: var(--danger-bg); border-left: 3px solid var(--danger); color: var(--danger); }
     .status-warning  { background: var(--warning-bg); border-left: 3px solid var(--warning-border); color: #7a5500; }
 
-    /* ── Summary bar ─────────────────────────────────────────── */
+    /* ── Summary / export bar ────────────────────────────────── */
     .summary-bar {
       display: flex;
       align-items: center;
@@ -236,7 +211,7 @@
     .summary-stat { font-size: 0.82rem; color: var(--text-muted); }
     .summary-stat b { color: var(--text); }
     .summary-stat.fail b { color: var(--danger); }
-    .summary-bar .right { margin-left: auto; }
+    .summary-bar .right { margin-left: auto; display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
     /* ── Image cards ─────────────────────────────────────────── */
     .image-card {
@@ -258,35 +233,31 @@
       background: var(--bg-page);
     }
     .thumb {
-      width: 52px;
-      height: 52px;
+      width: 52px; height: 52px;
       object-fit: cover;
       border-radius: 4px;
       border: 1px solid var(--border);
       flex-shrink: 0;
+      background:
+        linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%),
+        linear-gradient(45deg, #ddd 25%, #fff 25%, #fff 75%, #ddd 75%);
+      background-size: 12px 12px;
+      background-position: 0 0, 6px 6px;
     }
     .thumb-placeholder {
-      width: 52px;
-      height: 52px;
+      width: 52px; height: 52px;
       border-radius: 4px;
       border: 1px solid var(--border);
       background: var(--border);
       flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       font-size: 1.3rem;
     }
     .image-card-meta { flex: 1; min-width: 0; }
     .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.68rem;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 999px;
-      margin-bottom: 3px;
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.68rem; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; margin-bottom: 3px;
     }
     .badge-success { background: var(--success-bg); color: var(--accent); }
     .badge-error   { background: var(--danger-bg);  color: var(--danger); }
@@ -294,25 +265,34 @@
       font-size: 0.73rem;
       font-family: monospace;
       color: var(--text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .exif-line { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; }
+    .card-actions { flex-shrink: 0; }
+
+    /* ── Metric chips ────────────────────────────────────────── */
+    .metric-row {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 0.6rem 0.9rem 0;
+    }
+    .metric-chip {
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .metric-chip b { color: var(--text); font-weight: 600; }
 
     /* ── Colour swatches ─────────────────────────────────────── */
     .swatches {
-      padding: 0.9rem 1rem;
-      display: flex;
-      flex-wrap: wrap;
+      padding: 0.7rem 1rem 0.9rem;
+      display: flex; flex-wrap: wrap;
       gap: 0.6rem;
       align-items: flex-end;
     }
-    .swatch {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-    }
+    .swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .swatch-block {
       border-radius: 4px;
       border: 1px solid rgba(0,0,0,0.08);
@@ -321,32 +301,13 @@
       width: 44px;
     }
     .swatch-block:hover { transform: scale(1.06); }
-    .swatch.dominant .swatch-block {
-      border: 2px solid var(--primary);
-    }
-    .swatch-pct {
-      font-size: 0.7rem;
-      font-weight: 600;
-      color: var(--text);
-      text-align: center;
-    }
-    .swatch-hex {
-      font-size: 0.63rem;
-      font-family: monospace;
-      color: var(--text-muted);
-      text-align: center;
-    }
+    .swatch.dominant .swatch-block { border: 2px solid var(--primary); }
+    .swatch-pct { font-size: 0.7rem; font-weight: 600; color: var(--text); text-align: center; }
+    .swatch-hex { font-size: 0.63rem; font-family: monospace; color: var(--text-muted); text-align: center; }
 
     /* ── Error detail ────────────────────────────────────────── */
-    .error-detail {
-      padding: 0.7rem 0.9rem;
-      font-size: 0.82rem;
-      color: var(--danger);
-    }
-    .error-detail ul {
-      margin: 0.4rem 0 0 1.1rem;
-      color: var(--text-muted);
-    }
+    .error-detail { padding: 0.7rem 0.9rem; font-size: 0.82rem; color: var(--danger); }
+    .error-detail ul { margin: 0.4rem 0 0 1.1rem; color: var(--text-muted); }
     .error-detail ul li { margin-bottom: 2px; }
 
     /* ── Debug log ───────────────────────────────────────────── */
@@ -368,14 +329,12 @@
 
     /* ── Footer ──────────────────────────────────────────────── */
     .page-footer {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 0 1.5rem 2rem;
+      max-width: 960px;
+      margin: 0.5rem auto 0;
+      padding: 0.9rem 1.5rem 2rem;
       font-size: 0.73rem;
       color: var(--text-muted);
       border-top: 1px solid var(--border);
-      padding-top: 0.9rem;
-      margin-top: 0.5rem;
     }
     .page-footer a { color: var(--accent); text-decoration: none; }
     .page-footer a:hover { text-decoration: underline; }
@@ -385,7 +344,7 @@
 
 <header class="page-header">
   <h1>Batch Image Colour Analyzer</h1>
-  <p>Analyze colour properties in large image datasets + download colour data</p>
+  <p>Analyse colour properties across image datasets — all processing runs locally in your browser</p>
 </header>
 
 <div class="page-body">
@@ -393,36 +352,51 @@
   <!-- Instructions (collapsible) -->
   <details>
     <div class="info-box">
-      <summary>Image URL requirements</summary>
+      <summary>How it works</summary>
       <ul>
-        <li><strong>Direct image links only</strong> — URL must end in .jpg, .jpeg, or .png</li>
-        <li><strong>Publicly accessible</strong> — no login or authentication required</li>
-        <li><strong>Use HTTPS</strong> where possible for better compatibility</li>
+        <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF metadata (GPS, date, camera) is fully readable.</li>
+        <li><strong>Image URLs</strong> — direct links to .jpg, .jpeg, .png, .webp, .gif, or .bmp files. The image host must permit cross-origin access (CORS); images that block it will fail with a clear message.</li>
+        <li><strong>PNG transparency is respected</strong> — choose whether transparent areas are composited onto white, black, or grey, or excluded entirely so only opaque pixels are analysed.</li>
+        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level and hue-histogram tables, each downloadable as CSV.</li>
       </ul>
-      <div class="examples">e.g. https://i.imgur.com/example.jpg &nbsp;·&nbsp; https://example.com/photos/image.png</div>
     </div>
   </details>
 
-  <!-- Form -->
+  <!-- Input -->
+  <div class="card">
+    <div class="card-title">Images</div>
+
+    <div class="drop-zone" id="dropZone">
+      <div><b>Drop images here</b>, or click to browse — or <a href="#" id="pickFolder" onclick="event.stopPropagation()">select a whole folder</a></div>
+      <div class="sub">JPG, PNG, WebP, GIF, BMP · nothing leaves your computer</div>
+    </div>
+    <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+    <input type="file" id="folderInput" webkitdirectory style="display:none">
+    <div class="file-pill-row" id="filePills"></div>
+
+    <div class="field" style="margin-top:0.8rem">
+      <label for="imageUrl">Image URLs (optional, one per line)</label>
+      <textarea id="imageUrl" rows="3"
+        placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.png"></textarea>
+    </div>
+  </div>
+
+  <!-- Configuration -->
   <div class="card">
     <div class="card-title">Configuration</div>
     <div class="form-grid">
 
-      <div class="field full-width">
-        <label for="imageUrl">Image URLs (one per line)</label>
-        <textarea id="imageUrl" rows="5"
-          placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg&#10;https://example.com/image3.png"></textarea>
-      </div>
-
       <div class="field">
         <label for="precision">Analysis Precision</label>
         <select id="precision">
-          <option value="vlow">Very Low (50px) — Fastest</option>
-          <option value="low">Low (75px) — Fast</option>
-          <option value="medium" selected>Medium (100px) — Balanced</option>
-          <option value="high">High (150px) — Detailed</option>
-          <option value="vhigh">Very High (200px) — Most Detailed</option>
+          <option value="50">Very Low (50px) — Fastest</option>
+          <option value="75">Low (75px) — Fast</option>
+          <option value="100" selected>Medium (100px) — Balanced</option>
+          <option value="150">High (150px) — Detailed</option>
+          <option value="200">Very High (200px) — Most Detailed</option>
+          <option value="400">Ultra (400px) — Slowest</option>
         </select>
+        <div class="hint">Images are downsampled to this maximum dimension before analysis</div>
       </div>
 
       <div class="field">
@@ -438,26 +412,38 @@
           <option value="8">8 clusters</option>
           <option value="9">9 clusters</option>
           <option value="10">10 clusters</option>
-          <option value="11">11 clusters</option>
           <option value="12">12 clusters</option>
-          <option value="13">13 clusters</option>
-          <option value="14">14 clusters</option>
           <option value="15">15 clusters</option>
           <option value="20">20 clusters</option>
         </select>
+        <div class="hint">K-means clustering (k-means++ init, fixed seed for reproducibility)</div>
+      </div>
+
+      <div class="field">
+        <label for="transparencyBg">Transparency Handling</label>
+        <select id="transparencyBg">
+          <option value="white" selected>Composite onto white</option>
+          <option value="black">Composite onto black</option>
+          <option value="gray">Composite onto grey</option>
+          <option value="none">Opaque pixels only</option>
+        </select>
+        <div class="hint">How transparent PNG areas are treated</div>
       </div>
 
       <div class="field full-width">
         <div class="checkbox-row">
-          <label><input type="checkbox" id="includeHistogram"> Include Histogram Data</label>
-          <label><input type="checkbox" id="includePixel"> Include Pixel Data</label>
+          <label><input type="checkbox" id="includeLab" checked> LAB / LCH colour values</label>
+          <label><input type="checkbox" id="includeExif" checked> Extract EXIF (GPS, date, camera)</label>
+          <label><input type="checkbox" id="includeHistogram"> Hue histogram table</label>
+          <label><input type="checkbox" id="includePixel"> Pixel-level table (large!)</label>
         </div>
       </div>
 
     </div>
 
     <div class="actions">
-      <button id="analyzeBtn" class="btn btn-primary" onclick="analyzeImages()">Analyze Images</button>
+      <button id="analyzeBtn" class="btn btn-primary" onclick="analyzeImages()">Analyse Images</button>
+      <button class="btn btn-outline" onclick="clearAll()">Clear</button>
       <button id="debugToggle" class="btn btn-outline" onclick="toggleDebug()" style="display:none">Show log</button>
     </div>
   </div>
@@ -474,29 +460,470 @@
 </div>
 
 <footer class="page-footer">
-  Credit: this tool accesses the <a href="https://mk.bcgsc.ca/color-summarizer/?api">Image Color Summarizer API</a> by <a href="https://mk.bcgsc.ca/">Martin Krzywinski</a>. Created for educational instruction by <a href="https://jcinnamon.github.io/">Jonathan Cinnamon</a>, 2024.
+  All analysis runs locally in your browser; no images are uploaded to any server. K-means clustering with HSV, LAB and LCH colour values, whole-image summary metrics, EXIF extraction, and full PNG transparency support. Created for research and educational instruction by <a href="https://jcinnamon.github.io/">Jonathan Cinnamon</a>, 2026.
 </footer>
 
 <script>
-const WORKER_URL = 'https://color-summarizer-proxy.snowy-shadow-118c.workers.dev';
+/* ═══════════════════════════════════════════════════════════════════
+   ANALYSIS-CORE-START  (pure functions — no DOM access)
+   ═══════════════════════════════════════════════════════════════════ */
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Seeded PRNG (reproducible k-means) ──────────────────────────────
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
+// ── Colour conversions ──────────────────────────────────────────────
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v =>
+    Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')
+  ).join('');
+}
+
+// H: 0-360 int, S/V: 0-100 (1 dp) — matches the Python script's ranges
+function rgbToHsv(r, g, b) {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === rn)      h = ((gn - bn) / d) % 6;
+    else if (max === gn) h = (bn - rn) / d + 2;
+    else                 h = (rn - gn) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return [Math.round(h) % 360, Math.round(s * 1000) / 10, Math.round(max * 1000) / 10];
+}
+
+// sRGB (D65) → CIELAB
+function rgbToLab(r, g, b) {
+  let rn = r / 255, gn = g / 255, bn = b / 255;
+  const lin = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  rn = lin(rn); gn = lin(gn); bn = lin(bn);
+  // sRGB → XYZ (D65)
+  let x = rn * 0.4124564 + gn * 0.3575761 + bn * 0.1804375;
+  let y = rn * 0.2126729 + gn * 0.7151522 + bn * 0.0721750;
+  let z = rn * 0.0193339 + gn * 0.1191920 + bn * 0.9503041;
+  // Normalise by D65 white point
+  x /= 0.95047; y /= 1.00000; z /= 1.08883;
+  const f = t => (t > 0.008856 ? Math.cbrt(t) : (7.787 * t) + 16 / 116);
+  const fx = f(x), fy = f(y), fz = f(z);
+  return [
+    Math.round((116 * fy - 16) * 100) / 100,
+    Math.round((500 * (fx - fy)) * 100) / 100,
+    Math.round((200 * (fy - fz)) * 100) / 100,
+  ];
+}
+
+function labToLch(L, a, b) {
+  const C = Math.sqrt(a * a + b * b);
+  let H = Math.atan2(b, a) * 180 / Math.PI;
+  if (H < 0) H += 360;
+  return [Math.round(C * 100) / 100, Math.round(H * 100) / 100];
+}
+
+// ── K-means (k-means++ init, fixed seed) ────────────────────────────
+// pixels: Uint8Array/array, flat [r,g,b, r,g,b, ...]
+function kmeans(pixels, k, seed = 42, maxIter = 40) {
+  const n = pixels.length / 3;
+  if (n === 0 || k < 1) return null;
+  k = Math.min(k, n);
+  const rand = mulberry32(seed);
+
+  // k-means++ initialisation
+  const centers = new Float64Array(k * 3);
+  const firstIdx = Math.floor(rand() * n) * 3;
+  centers[0] = pixels[firstIdx]; centers[1] = pixels[firstIdx + 1]; centers[2] = pixels[firstIdx + 2];
+  const minDist = new Float64Array(n).fill(Infinity);
+
+  for (let c = 1; c < k; c++) {
+    let total = 0;
+    const pc = (c - 1) * 3;
+    for (let i = 0; i < n; i++) {
+      const dr = pixels[i * 3]     - centers[pc];
+      const dg = pixels[i * 3 + 1] - centers[pc + 1];
+      const db = pixels[i * 3 + 2] - centers[pc + 2];
+      const d = dr * dr + dg * dg + db * db;
+      if (d < minDist[i]) minDist[i] = d;
+      total += minDist[i];
+    }
+    let target = rand() * total, idx = 0;
+    for (let i = 0; i < n; i++) {
+      target -= minDist[i];
+      if (target <= 0) { idx = i; break; }
+      idx = i;
+    }
+    centers[c * 3] = pixels[idx * 3]; centers[c * 3 + 1] = pixels[idx * 3 + 1]; centers[c * 3 + 2] = pixels[idx * 3 + 2];
+  }
+
+  const labels = new Int32Array(n);
+  const counts = new Float64Array(k);
+  const sums   = new Float64Array(k * 3);
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // Assignment
+    let changed = 0;
+    for (let i = 0; i < n; i++) {
+      const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
+      let best = 0, bestD = Infinity;
+      for (let c = 0; c < k; c++) {
+        const dr = r - centers[c * 3], dg = g - centers[c * 3 + 1], db = b - centers[c * 3 + 2];
+        const d = dr * dr + dg * dg + db * db;
+        if (d < bestD) { bestD = d; best = c; }
+      }
+      if (labels[i] !== best) { labels[i] = best; changed++; }
+    }
+    // Update
+    counts.fill(0); sums.fill(0);
+    for (let i = 0; i < n; i++) {
+      const c = labels[i];
+      counts[c]++;
+      sums[c * 3]     += pixels[i * 3];
+      sums[c * 3 + 1] += pixels[i * 3 + 1];
+      sums[c * 3 + 2] += pixels[i * 3 + 2];
+    }
+    for (let c = 0; c < k; c++) {
+      if (counts[c] > 0) {
+        centers[c * 3]     = sums[c * 3]     / counts[c];
+        centers[c * 3 + 1] = sums[c * 3 + 1] / counts[c];
+        centers[c * 3 + 2] = sums[c * 3 + 2] / counts[c];
+      } else {
+        // Re-seed empty cluster at a random pixel
+        const ri = Math.floor(rand() * n) * 3;
+        centers[c * 3] = pixels[ri]; centers[c * 3 + 1] = pixels[ri + 1]; centers[c * 3 + 2] = pixels[ri + 2];
+      }
+    }
+    if (changed === 0) break;
+  }
+
+  return { centers, counts, labels, k, n };
+}
+
+// ── Whole-image summary metrics ─────────────────────────────────────
+function imageMetrics(pixels) {
+  const n = pixels.length / 3;
+  if (n === 0) return null;
+
+  let sumR = 0, sumG = 0, sumB = 0;
+  let sumSin = 0, sumCos = 0, hueN = 0;
+  let sumS = 0, sumV = 0;
+  let warm = 0, cool = 0, neutral = 0;
+  let sumRg = 0, sumYb = 0, sumRg2 = 0, sumYb2 = 0;
+  const hueBins = new Float64Array(36);
+  let hueBinN = 0;
+
+  for (let i = 0; i < n; i++) {
+    const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
+    sumR += r; sumG += g; sumB += b;
+
+    const [h, s, v] = rgbToHsv(r, g, b);
+    sumS += s; sumV += v;
+
+    // Circular hue statistics + warm/cool (chromatic pixels only)
+    if (s >= 10 && v >= 10) {
+      const rad = h * Math.PI / 180;
+      sumSin += Math.sin(rad); sumCos += Math.cos(rad); hueN++;
+      if (h < 90 || h >= 330) warm++; else cool++;
+      hueBins[Math.min(35, Math.floor(h / 10))]++;
+      hueBinN++;
+    } else {
+      neutral++;
+    }
+
+    // Hasler–Süsstrunk colourfulness components
+    const rg = r - g;
+    const yb = 0.5 * (r + g) - b;
+    sumRg += rg; sumYb += yb;
+    sumRg2 += rg * rg; sumYb2 += yb * yb;
+  }
+
+  // Circular mean hue
+  let meanHue = null;
+  if (hueN > 0) {
+    meanHue = Math.atan2(sumSin / hueN, sumCos / hueN) * 180 / Math.PI;
+    if (meanHue < 0) meanHue += 360;
+    meanHue = Math.round(meanHue * 10) / 10;
+  }
+
+  // Colourfulness M = sqrt(var_rg + var_yb) + 0.3 * sqrt(mean_rg² + mean_yb²)
+  const mRg = sumRg / n, mYb = sumYb / n;
+  const vRg = Math.max(0, sumRg2 / n - mRg * mRg);
+  const vYb = Math.max(0, sumYb2 / n - mYb * mYb);
+  const colourfulness = Math.round((Math.sqrt(vRg + vYb) + 0.3 * Math.sqrt(mRg * mRg + mYb * mYb)) * 100) / 100;
+
+  // Hue entropy (normalised 0–1 over 36 bins)
+  let entropy = null;
+  if (hueBinN > 0) {
+    let e = 0;
+    for (let i = 0; i < 36; i++) {
+      if (hueBins[i] > 0) {
+        const p = hueBins[i] / hueBinN;
+        e -= p * Math.log2(p);
+      }
+    }
+    entropy = Math.round((e / Math.log2(36)) * 1000) / 1000;
+  }
+
+  const pct = x => Math.round((x / n) * 1000) / 10;
+  return {
+    mean_r: Math.round(sumR / n), mean_g: Math.round(sumG / n), mean_b: Math.round(sumB / n),
+    mean_hue: meanHue,
+    mean_saturation: Math.round((sumS / n) * 10) / 10,
+    mean_value: Math.round((sumV / n) * 10) / 10,
+    colourfulness,
+    warm_pct: pct(warm), cool_pct: pct(cool), neutral_pct: pct(neutral),
+    hue_entropy: entropy,
+    hue_bins: Array.from(hueBins),
+    chromatic_n: hueBinN,
+  };
+}
+
+// ── EXIF parser (JPEG APP1 / TIFF) ──────────────────────────────────
+function parseExif(buffer) {
+  const out = {};
+  try {
+    const view = new DataView(buffer);
+    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return out; // not a JPEG
+
+    // Find APP1 Exif segment
+    let offset = 2, tiffStart = -1;
+    while (offset + 4 < view.byteLength) {
+      const marker = view.getUint16(offset);
+      if ((marker & 0xFF00) !== 0xFF00) break;
+      const size = view.getUint16(offset + 2);
+      if (marker === 0xFFE1 && offset + 10 < view.byteLength &&
+          view.getUint32(offset + 4) === 0x45786966 /* "Exif" */) {
+        tiffStart = offset + 10;
+        break;
+      }
+      if (marker === 0xFFDA) break; // start of scan — no EXIF
+      offset += 2 + size;
+    }
+    if (tiffStart < 0) return out;
+
+    const little = view.getUint16(tiffStart) === 0x4949;
+    const u16 = o => view.getUint16(tiffStart + o, little);
+    const u32 = o => view.getUint32(tiffStart + o, little);
+
+    const readAscii = (valOffset, count) => {
+      let s = '';
+      for (let i = 0; i < count - 1; i++) {
+        const ch = view.getUint8(tiffStart + valOffset + i);
+        if (ch === 0) break;
+        s += String.fromCharCode(ch);
+      }
+      return s.trim();
+    };
+    const readRationals = (valOffset, count) => {
+      const arr = [];
+      for (let i = 0; i < count; i++) {
+        const num = u32(valOffset + i * 8);
+        const den = u32(valOffset + i * 8 + 4);
+        arr.push(den === 0 ? 0 : num / den);
+      }
+      return arr;
+    };
+
+    // Read one IFD; returns map tag → {type, count, valueOffset}
+    const readIfd = (ifdOffset) => {
+      const entries = {};
+      if (ifdOffset + 2 > view.byteLength - tiffStart) return entries;
+      const count = u16(ifdOffset);
+      for (let i = 0; i < count; i++) {
+        const e = ifdOffset + 2 + i * 12;
+        const tag = u16(e);
+        const type = u16(e + 2);
+        const cnt = u32(e + 4);
+        const typeSizes = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+        const byteLen = (typeSizes[type] || 1) * cnt;
+        const valOffset = byteLen <= 4 ? e + 8 : u32(e + 8);
+        entries[tag] = { type, count: cnt, valOffset, inlineOffset: e + 8 };
+      }
+      return entries;
+    };
+
+    const ifd0 = readIfd(u32(4));
+
+    const getAscii = (entries, tag) => {
+      const e = entries[tag];
+      return e && e.type === 2 ? readAscii(e.valOffset, e.count) : null;
+    };
+    const getShort = (entries, tag) => {
+      const e = entries[tag];
+      return e && (e.type === 3 || e.type === 4)
+        ? (e.type === 3 ? u16(e.valOffset) : u32(e.valOffset)) : null;
+    };
+
+    if (getAscii(ifd0, 0x010F)) out.make  = getAscii(ifd0, 0x010F);
+    if (getAscii(ifd0, 0x0110)) out.model = getAscii(ifd0, 0x0110);
+    const orient = getShort(ifd0, 0x0112);
+    if (orient) out.orientation = orient;
+
+    // Exif sub-IFD → DateTimeOriginal
+    if (ifd0[0x8769]) {
+      const exifIfd = readIfd(u32(ifd0[0x8769].inlineOffset));
+      const dto = getAscii(exifIfd, 0x9003) || getAscii(exifIfd, 0x9004);
+      if (dto) out.datetime = dto;
+    }
+    if (!out.datetime && getAscii(ifd0, 0x0132)) out.datetime = getAscii(ifd0, 0x0132);
+
+    // GPS sub-IFD
+    if (ifd0[0x8825]) {
+      const gps = readIfd(u32(ifd0[0x8825].inlineOffset));
+      const latRef = getAscii(gps, 0x0001);
+      const lonRef = getAscii(gps, 0x0003);
+      if (gps[0x0002] && gps[0x0004] && gps[0x0002].type === 5 && gps[0x0004].type === 5) {
+        const lat = readRationals(gps[0x0002].valOffset, 3);
+        const lon = readRationals(gps[0x0004].valOffset, 3);
+        let latDec = lat[0] + lat[1] / 60 + lat[2] / 3600;
+        let lonDec = lon[0] + lon[1] / 60 + lon[2] / 3600;
+        if (latRef === 'S') latDec = -latDec;
+        if (lonRef === 'W') lonDec = -lonDec;
+        out.gps_lat = Math.round(latDec * 1e6) / 1e6;
+        out.gps_lon = Math.round(lonDec * 1e6) / 1e6;
+      }
+      if (gps[0x0006] && gps[0x0006].type === 5) {
+        const alt = readRationals(gps[0x0006].valOffset, 1)[0];
+        const altRef = gps[0x0005] ? view.getUint8(tiffStart + gps[0x0005].inlineOffset) : 0;
+        out.gps_alt = Math.round((altRef === 1 ? -alt : alt) * 10) / 10;
+      }
+    }
+  } catch (e) { /* malformed EXIF — return what we have */ }
+  return out;
+}
+
+// ── Build analysis for one set of pixels ────────────────────────────
+// rgba: Uint8ClampedArray (RGBA), w/h at analysis resolution
+function analyzePixels(rgba, w, h, opts) {
+  const { numClusters, transparencyBg, includePixel } = opts;
+  const bgColors = { white: [255, 255, 255], black: [0, 0, 0], gray: [128, 128, 128] };
+
+  const nAll = w * h;
+  let pixels, coords = null;
+  let opaqueCount = 0, hasAlpha = false;
+
+  // First pass: detect alpha
+  for (let i = 0; i < nAll; i++) {
+    if (rgba[i * 4 + 3] < 255) { hasAlpha = true; break; }
+  }
+
+  if (hasAlpha && transparencyBg === 'none') {
+    // Keep only opaque pixels (alpha > 128) — matches the Python script
+    const tmp = new Uint8Array(nAll * 3);
+    coords = includePixel ? new Int32Array(nAll * 2) : null;
+    let j = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (rgba[i * 4 + 3] > 128) {
+          tmp[j * 3] = rgba[i * 4]; tmp[j * 3 + 1] = rgba[i * 4 + 1]; tmp[j * 3 + 2] = rgba[i * 4 + 2];
+          if (coords) { coords[j * 2] = x; coords[j * 2 + 1] = y; }
+          j++;
+        }
+      }
+    }
+    opaqueCount = j;
+    pixels = tmp.subarray(0, j * 3);
+    if (coords) coords = coords.subarray(0, j * 2);
+  } else {
+    // Composite onto background (or plain RGB copy)
+    const bg = bgColors[transparencyBg] || bgColors.white;
+    pixels = new Uint8Array(nAll * 3);
+    coords = includePixel ? new Int32Array(nAll * 2) : null;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const a = rgba[i * 4 + 3] / 255;
+        pixels[i * 3]     = Math.round(rgba[i * 4]     * a + bg[0] * (1 - a));
+        pixels[i * 3 + 1] = Math.round(rgba[i * 4 + 1] * a + bg[1] * (1 - a));
+        pixels[i * 3 + 2] = Math.round(rgba[i * 4 + 2] * a + bg[2] * (1 - a));
+        if (coords) { coords[i * 2] = x; coords[i * 2 + 1] = y; }
+        if (rgba[i * 4 + 3] > 128) opaqueCount++;
+      }
+    }
+  }
+
+  const nAnalyzed = pixels.length / 3;
+  if (nAnalyzed === 0) return { error: 'No opaque pixels found in transparent image' };
+
+  // K-means clusters
+  let clusters = [], km = null;
+  if (numClusters >= 2) {
+    km = kmeans(pixels, numClusters, 42);
+    const order = Array.from({ length: km.k }, (_, i) => i)
+      .sort((a, b) => km.counts[b] - km.counts[a]);
+    clusters = order.map((c, rank) => {
+      const r = km.centers[c * 3], g = km.centers[c * 3 + 1], b = km.centers[c * 3 + 2];
+      const [hh, ss, vv] = rgbToHsv(r, g, b);
+      const [L, A, B] = rgbToLab(r, g, b);
+      const [C, H] = labToLch(L, A, B);
+      return {
+        cluster: rank + 1,
+        _kmIndex: c,
+        hex: rgbToHex(r, g, b),
+        red: Math.round(r), green: Math.round(g), blue: Math.round(b),
+        hue: hh, saturation: ss, value: vv,
+        lab_l: L, lab_a: A, lab_b: B, lch_c: C, lch_h: H,
+        percentage: Math.round((km.counts[c] / nAnalyzed) * 10000) / 100,
+        pixel_count: km.counts[c],
+      };
+    });
+  }
+
+  // Whole-image metrics
+  const metrics = imageMetrics(pixels);
+  metrics.analyzed_pixels = nAnalyzed;
+  metrics.opaque_pct = hasAlpha ? Math.round((opaqueCount / nAll) * 1000) / 10 : 100;
+  metrics.has_alpha = hasAlpha;
+
+  // Pixel-level rows
+  let pixelRows = null;
+  if (includePixel) {
+    const kmIndexToRank = {};
+    clusters.forEach(cl => { kmIndexToRank[cl._kmIndex] = cl; });
+    pixelRows = [];
+    for (let i = 0; i < nAnalyzed; i++) {
+      const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
+      const [hh, ss, vv] = rgbToHsv(r, g, b);
+      const row = {
+        x: coords ? coords[i * 2] : i % w,
+        y: coords ? coords[i * 2 + 1] : Math.floor(i / w),
+        hex: rgbToHex(r, g, b), r, g, b, h: hh, s: ss, v: vv,
+      };
+      if (km) {
+        const cl = kmIndexToRank[km.labels[i]];
+        row.cluster_id = cl.cluster;
+        row.cluster_hex = cl.hex;
+      }
+      pixelRows.push(row);
+    }
+  }
+
+  return { clusters, metrics, pixelRows, analyzedW: w, analyzedH: h };
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ANALYSIS-CORE-END
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ── State ───────────────────────────────────────────────────────────
+let queuedFiles = [];      // File objects
+window._results = [];      // successful analyses
+window._paletteData = {};  // per-card palette render data
+
+// ── Helpers ─────────────────────────────────────────────────────────
 function escapeHtml(text) {
   const d = document.createElement('div');
-  d.textContent = text;
+  d.textContent = text == null ? '' : String(text);
   return d.innerHTML;
-}
-
-function isValidImageUrl(url) {
-  try {
-    return /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(new URL(url).pathname);
-  } catch { return false; }
-}
-
-function extractErrorMessage(result) {
-  const m = result.match(/\*\*\* ERROR \*\*\*\s*(.*?)(?:\n|$)/);
-  return m ? m[1].trim() : null;
 }
 
 function setStatus(html, type = '') {
@@ -511,40 +938,290 @@ function log(msg) {
 }
 
 function toggleDebug() {
-  const d   = document.getElementById('debug');
+  const d = document.getElementById('debug');
   const btn = document.getElementById('debugToggle');
   btn.textContent = d.classList.toggle('visible') ? 'Hide log' : 'Show log';
 }
 
-// ── Colour parsing ────────────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function parseColors(tsvText) {
-  const lines = tsvText.trim().split('\n').filter(l => l.trim());
-  if (lines.length < 2) return [];
-  const headers = lines[0].split('\t').map(h => h.trim().toLowerCase());
-  const hexIdx  = headers.indexOf('hex');
-  const fracIdx = headers.indexOf('fraction');
-  if (hexIdx === -1) return [];
-  return lines.slice(1)
-    .map(line => {
-      const cols = line.split('\t');
-      return {
-        hex:      '#' + (cols[hexIdx] || '').trim(),
-        fraction: fracIdx !== -1 ? (parseFloat(cols[fracIdx]) || 0) : 0,
-      };
-    })
-    .filter(c => /^#[0-9a-f]{3,6}$/i.test(c.hex));
+// ── File input wiring ───────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const folderInput = document.getElementById('folderInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+document.getElementById('pickFolder').addEventListener('click', e => {
+  e.preventDefault();
+  folderInput.click();
+});
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+folderInput.addEventListener('change', () => { addFiles(folderInput.files); folderInput.value = ''; });
+
+const IMG_RE = /\.(jpe?g|png|gif|bmp|webp)$/i;
+function addFiles(fileList) {
+  let added = 0, skipped = 0;
+  for (const f of fileList) {
+    if (IMG_RE.test(f.name) || (f.type && f.type.startsWith('image/'))) {
+      if (!queuedFiles.some(q => q.name === f.name && q.size === f.size)) {
+        queuedFiles.push(f);
+        added++;
+      }
+    } else skipped++;
+  }
+  if (skipped) log(`Skipped ${skipped} non-image file(s)`);
+  renderFilePills();
 }
 
-function renderSwatches(colors) {
-  if (!colors.length) return '';
-  const sorted = [...colors].sort((a, b) => b.fraction - a.fraction);
-  return sorted.map((c, i) => {
-    const pct = (c.fraction * 100).toFixed(1) + '%';
-    // Height scales with coverage: dominant is taller
-    const h = Math.round(28 + c.fraction * 52);
+function removeFile(idx) {
+  queuedFiles.splice(idx, 1);
+  renderFilePills();
+}
+
+function renderFilePills() {
+  const el = document.getElementById('filePills');
+  if (!queuedFiles.length) { el.innerHTML = ''; return; }
+  el.innerHTML = queuedFiles.map((f, i) =>
+    `<span class="file-pill">${escapeHtml(f.name)} <button onclick="removeFile(${i})" title="Remove">×</button></span>`
+  ).join('') + `<span class="file-pill"><b>${queuedFiles.length}</b>&nbsp;file(s) queued</span>`;
+}
+
+function clearAll() {
+  queuedFiles = [];
+  window._results = [];
+  window._paletteData = {};
+  renderFilePills();
+  document.getElementById('imageUrl').value = '';
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('debug').textContent = '';
+  document.getElementById('debug').classList.remove('visible');
+  document.getElementById('debugToggle').style.display = 'none';
+  setStatus('');
+}
+
+// ── Image loading ───────────────────────────────────────────────────
+function loadImageFromBlobUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not decode image'));
+    img.src = url;
+  });
+}
+
+function loadImageFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Image failed to load — check the URL is a direct, publicly accessible image link'));
+    img.src = url;
+  });
+}
+
+function drawScaled(img, maxDim) {
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  return { rgba: ctx.getImageData(0, 0, w, h).data, w, h };
+}
+
+// ── Main analysis loop ──────────────────────────────────────────────
+async function analyzeImages() {
+  const urls = document.getElementById('imageUrl').value.trim()
+    .split('\n').map(u => u.trim()).filter(Boolean);
+
+  const sources = [
+    ...queuedFiles.map(f => ({ kind: 'file', file: f, label: f.name })),
+    ...urls.map(u => ({ kind: 'url', url: u, label: u })),
+  ];
+
+  if (!sources.length) {
+    setStatus('Add at least one local image or image URL.', 'error');
+    return;
+  }
+
+  const opts = {
+    precision:      parseInt(document.getElementById('precision').value, 10),
+    numClusters:    parseInt(document.getElementById('numClusters').value, 10),
+    transparencyBg: document.getElementById('transparencyBg').value,
+    includeLab:     document.getElementById('includeLab').checked,
+    includeExif:    document.getElementById('includeExif').checked,
+    includeHistogram: document.getElementById('includeHistogram').checked,
+    includePixel:   document.getElementById('includePixel').checked,
+  };
+
+  if (opts.includePixel && sources.length * opts.precision * opts.precision > 2_000_000) {
+    log('⚠ Pixel-level table will be large — consider lower precision or fewer images.');
+  }
+
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const debugToggle = document.getElementById('debugToggle');
+  analyzeBtn.disabled = true;
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('debug').textContent = '';
+  window._results = [];
+  window._paletteData = {};
+
+  const cards = [];
+  let ok = 0, failed = 0;
+
+  for (let i = 0; i < sources.length; i++) {
+    const src = sources[i];
+    setStatus(`Analysing image ${i + 1} of ${sources.length}… (${escapeHtml(src.label)})`, 'progress');
+    log(`[${i + 1}/${sources.length}] ${src.label}`);
+    await sleep(15); // let the UI paint
+
+    try {
+      let img, exif = {}, thumbUrl, buffer = null;
+
+      if (src.kind === 'file') {
+        buffer = await src.file.arrayBuffer();
+        thumbUrl = URL.createObjectURL(src.file);
+        img = await loadImageFromBlobUrl(thumbUrl);
+      } else {
+        img = await loadImageFromUrl(src.url);
+        thumbUrl = src.url;
+        if (opts.includeExif) {
+          try {
+            const resp = await fetch(src.url, { mode: 'cors' });
+            if (resp.ok) buffer = await resp.arrayBuffer();
+          } catch { log('  · EXIF unavailable for this URL (CORS)'); }
+        }
+      }
+
+      if (opts.includeExif && buffer) {
+        exif = parseExif(buffer);
+        const bits = [];
+        if (exif.datetime) bits.push(exif.datetime);
+        if (exif.gps_lat != null) bits.push(`GPS ${exif.gps_lat}, ${exif.gps_lon}`);
+        if (bits.length) log('  · EXIF: ' + bits.join(' · '));
+      }
+
+      const { rgba, w, h } = drawScaled(img, opts.precision);
+      const result = analyzePixels(rgba, w, h, opts);
+      if (result.error) throw new Error(result.error);
+
+      const record = {
+        id: window._results.length + 1,
+        source: src.kind === 'file' ? 'local' : src.url,
+        filename: src.kind === 'file' ? src.file.name : (new URL(src.url).pathname.split('/').pop() || src.url),
+        width: img.naturalWidth, height: img.naturalHeight,
+        analyzedW: result.analyzedW, analyzedH: result.analyzedH,
+        exif, clusters: result.clusters, metrics: result.metrics,
+        pixelRows: result.pixelRows, thumbUrl, label: src.label,
+      };
+      window._results.push(record);
+      cards.push({ ok: true, record });
+      ok++;
+      log(`  ✓ ${result.clusters.length ? result.clusters.length + ' cluster(s), ' : ''}${result.metrics.analyzed_pixels} px analysed` +
+          (result.metrics.has_alpha ? ` (transparency: ${opts.transparencyBg})` : ''));
+    } catch (err) {
+      failed++;
+      cards.push({ ok: false, label: src.label, error: err.message || 'Unknown error' });
+      log(`  ✗ ${err.message}`);
+    }
+  }
+
+  renderResults(cards, sources.length, ok, failed, opts);
+  setStatus(ok
+    ? `Analysis complete — ${ok} of ${sources.length} image(s) analysed. Use the download buttons above the results.`
+    : 'Analysis complete — all images failed. Check the log for details.',
+    ok ? 'success' : 'error');
+  debugToggle.style.display = '';
+  analyzeBtn.disabled = false;
+}
+
+// ── Rendering ───────────────────────────────────────────────────────
+function renderResults(cards, total, ok, failed, opts) {
+  let html = `<div class="summary-bar">
+    <div class="summary-stat">Analysed <b>${total}</b> image${total !== 1 ? 's' : ''}</div>`;
+  if (ok)     html += `<div class="summary-stat"><b>${ok}</b> succeeded</div>`;
+  if (failed) html += `<div class="summary-stat fail"><b>${failed}</b> failed</div>`;
+  if (ok) {
+    html += `<div class="right">`;
+    if (opts.numClusters >= 2)
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadClusterCSV()">⬇ Clusters CSV</button>`;
+    html += `<button class="btn btn-outline btn-sm" onclick="downloadImageCSV()">⬇ Image summary CSV</button>`;
+    if (opts.includeHistogram)
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadHistogramCSV()">⬇ Hue histogram CSV</button>`;
+    if (opts.includePixel)
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadPixelCSV()">⬇ Pixel CSV</button>`;
+    html += `</div>`;
+  }
+  html += `</div>`;
+
+  html += cards.map(card => {
+    if (!card.ok) {
+      return `
+        <div class="image-card is-error">
+          <div class="image-card-header">
+            <div class="thumb-placeholder">❌</div>
+            <div class="image-card-meta">
+              <div class="status-badge badge-error">Failed</div>
+              <div class="img-url">${escapeHtml(card.label)}</div>
+            </div>
+          </div>
+          <div class="error-detail"><strong>Error:</strong> ${escapeHtml(card.error)}
+            <ul><li>Local files avoid CORS restrictions entirely — try downloading the image and adding it as a file.</li></ul>
+          </div>
+        </div>`;
+    }
+
+    const r = card.record;
+    const m = r.metrics;
+    const exifBits = [];
+    if (r.exif.datetime) exifBits.push('📅 ' + escapeHtml(r.exif.datetime));
+    if (r.exif.gps_lat != null) exifBits.push(`📍 ${r.exif.gps_lat}, ${r.exif.gps_lon}`);
+    if (r.exif.make || r.exif.model) exifBits.push('📷 ' + escapeHtml([r.exif.make, r.exif.model].filter(Boolean).join(' ')));
+
+    const chips = [
+      `Mean HSV <b>${m.mean_hue ?? '–'}° / ${m.mean_saturation} / ${m.mean_value}</b>`,
+      `Colourfulness <b>${m.colourfulness}</b>`,
+      `Warm <b>${m.warm_pct}%</b> · Cool <b>${m.cool_pct}%</b> · Neutral <b>${m.neutral_pct}%</b>`,
+      `Hue entropy <b>${m.hue_entropy ?? '–'}</b>`,
+    ];
+    if (m.has_alpha) chips.push(`Opaque <b>${m.opaque_pct}%</b>`);
+
     return `
-      <div class="swatch${i === 0 ? ' dominant' : ''}" title="${c.hex} — ${pct}">
+      <div class="image-card is-success">
+        <div class="image-card-header">
+          <img class="thumb" src="${escapeHtml(r.thumbUrl)}" alt=""
+            onerror="this.outerHTML='<div class=&quot;thumb-placeholder&quot;>🖼</div>'">
+          <div class="image-card-meta">
+            <div class="status-badge badge-success">✓ Analysed</div>
+            <div class="img-url">${escapeHtml(r.label)} · ${r.width}×${r.height}px</div>
+            ${exifBits.length ? `<div class="exif-line">${exifBits.join(' &nbsp; ')}</div>` : ''}
+          </div>
+          ${r.clusters.length ? `<div class="card-actions">
+            <button class="btn btn-outline btn-sm" onclick="downloadPalettePNG(${r.id})">⬇ Palette PNG</button>
+          </div>` : ''}
+        </div>
+        <div class="metric-row">${chips.map(c => `<span class="metric-chip">${c}</span>`).join('')}</div>
+        ${r.clusters.length ? `<div class="swatches">${renderSwatches(r.clusters)}</div>` : '<div style="padding:0.6rem"></div>'}
+      </div>`;
+  }).join('');
+
+  document.getElementById('results').innerHTML = html;
+}
+
+function renderSwatches(clusters) {
+  return clusters.map((c, i) => {
+    const pct = c.percentage.toFixed(1) + '%';
+    const h = Math.round(28 + (c.percentage / 100) * 52);
+    return `
+      <div class="swatch${i === 0 ? ' dominant' : ''}" title="${c.hex} — ${pct} — HSV ${c.hue},${c.saturation},${c.value}">
         <div class="swatch-block" style="height:${h}px;background:${c.hex}"></div>
         <div class="swatch-pct">${pct}</div>
         <div class="swatch-hex">${c.hex}</div>
@@ -552,172 +1229,139 @@ function renderSwatches(colors) {
   }).join('');
 }
 
-function getSuggestions(errorMsg) {
-  const items = [];
-  if (errorMsg.includes('does not point to an image')) {
-    items.push('URL must end in .jpg, .jpeg, or .png — right-click the image and choose "Copy Image Address"');
-    items.push('Avoid URLs pointing to web pages rather than image files');
-  } else if (errorMsg.includes('HTTP error')) {
-    items.push('Check the image URL is publicly accessible');
-    items.push('Open the URL directly in your browser to verify it loads');
-  } else if (errorMsg.includes('Failed to fetch')) {
-    items.push('Check your internet connection');
-    items.push('The Color Summarizer API may be temporarily unavailable — try again shortly');
-  } else {
-    items.push('Verify the URL points to a valid, publicly accessible image file');
-    items.push('Try a different image to rule out API issues');
-  }
-  return `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
+// ── Palette PNG export ──────────────────────────────────────────────
+function downloadPalettePNG(id) {
+  const r = window._results.find(x => x.id === id);
+  if (!r || !r.clusters.length) return;
+  const sw = 120, sh = 150, pad = 16;
+  const canvas = document.createElement('canvas');
+  canvas.width = pad * 2 + r.clusters.length * sw;
+  canvas.height = sh + 70;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#1a2332';
+  ctx.font = '600 13px Inter, sans-serif';
+  ctx.fillText(r.filename, pad, 24);
+  r.clusters.forEach((c, i) => {
+    const x = pad + i * sw;
+    ctx.fillStyle = c.hex;
+    ctx.fillRect(x, 40, sw - 8, sh - 40);
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.strokeRect(x + 0.5, 40.5, sw - 9, sh - 41);
+    ctx.fillStyle = '#1a2332';
+    ctx.font = '600 12px Inter, sans-serif';
+    ctx.fillText(c.percentage.toFixed(1) + '%', x, sh + 18);
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#6b7a8d';
+    ctx.fillText(c.hex, x, sh + 34);
+    ctx.fillText(`H${c.hue} S${c.saturation} V${c.value}`, x, sh + 48);
+  });
+  canvas.toBlob(blob => downloadBlob(blob, stripExt(r.filename) + '_palette.png'), 'image/png');
 }
 
-// ── TSV processing ────────────────────────────────────────────────────────────
+function stripExt(name) { return name.replace(/\.[^.]+$/, ''); }
 
-function processResult(result, imageUrl, isFirstImage) {
-  const lines = result.split('\n');
-  let out = '';
-  if (isFirstImage) out += 'Image URL\t' + lines[0] + '\n';
-  out += lines.slice(1).filter(l => l.trim()).map(l => `${imageUrl}\t${l}`).join('\n') + '\n';
-  return out;
+// ── CSV builders ────────────────────────────────────────────────────
+function csvEscape(v) {
+  if (v == null) return '';
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-function downloadTSV(blob, fileName) {
+function buildCSV(header, rows) {
+  return header.join(',') + '\n' +
+    rows.map(row => row.map(csvEscape).join(',')).join('\n') + '\n';
+}
+
+function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
-  const a   = Object.assign(document.createElement('a'), { href: url, download: fileName });
+  const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// ── API call ──────────────────────────────────────────────────────────────────
-
-async function analyzeImage(imageUrl) {
-  const params = new URLSearchParams({
-    url:          imageUrl,
-    precision:    document.getElementById('precision').value,
-    num_clusters: document.getElementById('numClusters').value,
-    histogram:    document.getElementById('includeHistogram').checked ? '1' : '0',
-    pixel:        document.getElementById('includePixel').checked     ? '1' : '0',
-  });
-  const resp = await fetch(`${WORKER_URL}?${params}`);
-  const text = await resp.text();
-  if (!resp.ok) throw new Error(`HTTP error ${resp.status} — ${text}`);
-  return text;
+function downloadCSVText(text, fileName) {
+  downloadBlob(new Blob([text], { type: 'text/csv;charset=utf-8' }), fileName);
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+function todayStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-async function analyzeImages() {
-  const rawUrls    = document.getElementById('imageUrl').value.trim().split('\n');
-  const imageUrls  = rawUrls.map(u => u.trim()).filter(Boolean);
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const debugToggle = document.getElementById('debugToggle');
+function downloadClusterCSV() {
+  const includeLab = document.getElementById('includeLab').checked;
+  const header = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels',
+    'cluster', 'hex', 'red', 'green', 'blue', 'hue', 'saturation', 'value'];
+  if (includeLab) header.push('lab_l', 'lab_a', 'lab_b', 'lch_c', 'lch_h');
+  header.push('percentage', 'pixel_count');
 
-  document.getElementById('results').innerHTML = '';
-  document.getElementById('debug').textContent = '';
-  document.getElementById('debug').classList.remove('visible');
-  debugToggle.style.display = 'none';
-  setStatus('');
+  const rows = [];
+  for (const r of window._results) {
+    for (const c of r.clusters) {
+      const row = [r.id, r.filename, r.source, r.width, r.height, r.metrics.analyzed_pixels,
+        c.cluster, c.hex, c.red, c.green, c.blue, c.hue, c.saturation, c.value];
+      if (includeLab) row.push(c.lab_l, c.lab_a, c.lab_b, c.lch_c, c.lch_h);
+      row.push(c.percentage, c.pixel_count);
+      rows.push(row);
+    }
+  }
+  downloadCSVText(buildCSV(header, rows), `colour_clusters_${todayStamp()}.csv`);
+}
 
-  if (!imageUrls.length) {
-    setStatus('Please enter at least one image URL.', 'error');
+function downloadImageCSV() {
+  const header = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels', 'opaque_pct',
+    'exif_datetime', 'gps_lat', 'gps_lon', 'gps_alt', 'camera_make', 'camera_model', 'orientation',
+    'mean_r', 'mean_g', 'mean_b', 'mean_hue', 'mean_saturation', 'mean_value',
+    'colourfulness', 'warm_pct', 'cool_pct', 'neutral_pct', 'hue_entropy'];
+  const rows = window._results.map(r => [
+    r.id, r.filename, r.source, r.width, r.height, r.metrics.analyzed_pixels, r.metrics.opaque_pct,
+    r.exif.datetime ?? '', r.exif.gps_lat ?? '', r.exif.gps_lon ?? '', r.exif.gps_alt ?? '',
+    r.exif.make ?? '', r.exif.model ?? '', r.exif.orientation ?? '',
+    r.metrics.mean_r, r.metrics.mean_g, r.metrics.mean_b,
+    r.metrics.mean_hue ?? '', r.metrics.mean_saturation, r.metrics.mean_value,
+    r.metrics.colourfulness, r.metrics.warm_pct, r.metrics.cool_pct, r.metrics.neutral_pct,
+    r.metrics.hue_entropy ?? '',
+  ]);
+  downloadCSVText(buildCSV(header, rows), `colour_image-summary_${todayStamp()}.csv`);
+}
+
+function downloadHistogramCSV() {
+  const header = ['image_id', 'filename', 'hue_bin_start', 'hue_bin_end', 'pixel_count', 'pct_of_chromatic'];
+  const rows = [];
+  for (const r of window._results) {
+    const bins = r.metrics.hue_bins;
+    const n = r.metrics.chromatic_n || 0;
+    for (let i = 0; i < 36; i++) {
+      rows.push([r.id, r.filename, i * 10, i * 10 + 10, bins[i],
+        n ? Math.round((bins[i] / n) * 10000) / 100 : 0]);
+    }
+  }
+  downloadCSVText(buildCSV(header, rows), `colour_hue-histogram_${todayStamp()}.csv`);
+}
+
+function downloadPixelCSV() {
+  const header = ['image_id', 'filename', 'x', 'y', 'pixel_hex', 'pixel_r', 'pixel_g', 'pixel_b',
+    'pixel_hue', 'pixel_saturation', 'pixel_value', 'cluster_id', 'cluster_hex'];
+  const parts = [header.join(',') + '\n'];
+  let count = 0;
+  for (const r of window._results) {
+    if (!r.pixelRows) continue;
+    const chunk = r.pixelRows.map(p =>
+      [r.id, csvEscape(r.filename), p.x, p.y, p.hex, p.r, p.g, p.b, p.h, p.s, p.v,
+       p.cluster_id ?? '', p.cluster_hex ?? ''].join(',')
+    ).join('\n');
+    parts.push(chunk + '\n');
+    count += r.pixelRows.length;
+  }
+  if (count === 0) {
+    setStatus('No pixel data collected — enable "Pixel-level table" before analysing.', 'warning');
     return;
   }
-
-  const invalid = imageUrls.filter(u => !isValidImageUrl(u));
-  if (invalid.length) {
-    setStatus(`${invalid.length} URL(s) may not be direct image links and could fail.`, 'warning');
-  }
-
-  analyzeBtn.disabled = true;
-
-  const blobParts   = [];
-  const cards       = [];
-  let isFirstImage  = true;
-  let successCount  = 0;
-  let failCount     = 0;
-
-  for (let i = 0; i < imageUrls.length; i++) {
-    const url = imageUrls[i];
-    setStatus(`Analyzing image ${i + 1} of ${imageUrls.length}…`, 'progress');
-    log(`[${i + 1}/${imageUrls.length}] ${url}`);
-
-    try {
-      const result = await analyzeImage(url);
-      if (result.includes('*** ERROR ***')) {
-        throw new Error(extractErrorMessage(result) || 'API returned an error');
-      }
-      blobParts.push(processResult(result, url, isFirstImage));
-      const colors = parseColors(result);
-      cards.push({ url, ok: true, colors });
-      successCount++;
-      isFirstImage = false;
-      log(`  ✓ ${colors.length} colour(s) parsed`);
-    } catch (err) {
-      failCount++;
-      cards.push({ url, ok: false, error: err.message || 'Unknown error' });
-      log(`  ✗ ${err.message}`);
-    }
-  }
-
-  // Summary bar
-  let html = `<div class="summary-bar">
-    <div class="summary-stat">Analyzed <b>${imageUrls.length}</b> image${imageUrls.length !== 1 ? 's' : ''}</div>`;
-  if (successCount) html += `<div class="summary-stat"><b>${successCount}</b> succeeded</div>`;
-  if (failCount)    html += `<div class="summary-stat fail"><b>${failCount}</b> failed</div>`;
-  if (blobParts.length) html += `<div class="right"><button class="btn btn-outline" onclick="redownload()">⬇ Download Data</button></div>`;
-  html += `</div>`;
-
-  // Image cards
-  html += cards.map(card => {
-    const shortUrl = card.url.length > 72 ? '…' + card.url.slice(-68) : card.url;
-    if (card.ok) {
-      return `
-        <div class="image-card is-success">
-          <div class="image-card-header">
-            <img class="thumb" src="${escapeHtml(card.url)}" alt=""
-              onerror="this.outerHTML='<div class=&quot;thumb-placeholder&quot;>🖼</div>'">
-            <div class="image-card-meta">
-              <div class="status-badge badge-success">✓ Analysed</div>
-              <div class="img-url">${escapeHtml(shortUrl)}</div>
-            </div>
-          </div>
-          ${card.colors.length ? `<div class="swatches">${renderSwatches(card.colors)}</div>` : ''}
-        </div>`;
-    } else {
-      return `
-        <div class="image-card is-error">
-          <div class="image-card-header">
-            <div class="thumb-placeholder">❌</div>
-            <div class="image-card-meta">
-              <div class="status-badge badge-error">Failed</div>
-              <div class="img-url">${escapeHtml(shortUrl)}</div>
-            </div>
-          </div>
-          <div class="error-detail">
-            <strong>Error:</strong> ${escapeHtml(card.error)}
-            ${getSuggestions(card.error)}
-          </div>
-        </div>`;
-    }
-  }).join('');
-
-  document.getElementById('results').innerHTML = html;
-
-  if (blobParts.length) {
-    window._tsvBlob = new Blob(blobParts, { type: 'text/tab-separated-values' });
-    downloadTSV(window._tsvBlob, 'color_summary_all.tsv');
-    setStatus('Analysis complete. File downloaded.', 'success');
-  } else {
-    setStatus('Analysis complete — all images failed. Check the log for details.', 'error');
-  }
-
-  debugToggle.style.display = '';
-  analyzeBtn.disabled = false;
-}
-
-function redownload() {
-  if (window._tsvBlob) downloadTSV(window._tsvBlob, 'color_summary_all.tsv');
+  log(`Pixel CSV: ${count} rows`);
+  downloadBlob(new Blob(parts, { type: 'text/csv;charset=utf-8' }), `colour_pixels_${todayStamp()}.csv`);
 }
 </script>
 </body>
