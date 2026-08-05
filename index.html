@@ -471,7 +471,7 @@
     <div class="info-box">
       <summary>How it works</summary>
       <ul>
-        <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF metadata (GPS, date, camera) is fully readable.</li>
+        <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF metadata (GPS, date, camera) is read from JPEGs and from PNGs that carry an eXIf chunk, including cut-outs exported by Image Cutter with GPS/EXIF preserved.</li>
         <li><strong>Image URLs</strong> — direct links to .jpg, .jpeg, .png, .webp, .gif, or .bmp files. The image host must permit cross-origin access (CORS); images that block it will fail with a clear message.</li>
         <li><strong>PNG transparency is respected</strong> — choose whether transparent areas are composited onto white, black, or grey, or excluded entirely so only opaque pixels are analysed.</li>
         <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level and hue-histogram tables, each downloadable as CSV.</li>
@@ -809,26 +809,39 @@ function imageMetrics(pixels) {
   };
 }
 
-// ── EXIF parser (JPEG APP1 / TIFF) ──────────────────────────────────
+// ── EXIF parser (JPEG APP1 or PNG eXIf chunk → TIFF) ─────────────────
 function parseExif(buffer) {
   const out = {};
   try {
     const view = new DataView(buffer);
-    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return out; // not a JPEG
+    let tiffStart = -1;
 
-    // Find APP1 Exif segment
-    let offset = 2, tiffStart = -1;
-    while (offset + 4 < view.byteLength) {
-      const marker = view.getUint16(offset);
-      if ((marker & 0xFF00) !== 0xFF00) break;
-      const size = view.getUint16(offset + 2);
-      if (marker === 0xFFE1 && offset + 10 < view.byteLength &&
-          view.getUint32(offset + 4) === 0x45786966 /* "Exif" */) {
-        tiffStart = offset + 10;
-        break;
+    if (view.byteLength >= 8 &&
+        view.getUint32(0) === 0x89504E47 && view.getUint32(4) === 0x0D0A1A0A) {
+      // PNG — walk chunks for eXIf (data begins with the TIFF byte-order mark)
+      let p = 8;
+      while (p + 12 <= view.byteLength) {
+        const len = view.getUint32(p);
+        const type = view.getUint32(p + 4);
+        if (type === 0x65584966 /* 'eXIf' */) { tiffStart = p + 8; break; }
+        if (type === 0x49444154 /* 'IDAT' */) break; // image data reached — no eXIf
+        p += 12 + len;
       }
-      if (marker === 0xFFDA) break; // start of scan — no EXIF
-      offset += 2 + size;
+    } else if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
+      // JPEG — find the APP1 Exif segment
+      let offset = 2;
+      while (offset + 4 < view.byteLength) {
+        const marker = view.getUint16(offset);
+        if ((marker & 0xFF00) !== 0xFF00) break;
+        const size = view.getUint16(offset + 2);
+        if (marker === 0xFFE1 && offset + 10 < view.byteLength &&
+            view.getUint32(offset + 4) === 0x45786966 /* "Exif" */) {
+          tiffStart = offset + 10;
+          break;
+        }
+        if (marker === 0xFFDA) break; // start of scan — no EXIF
+        offset += 2 + size;
+      }
     }
     if (tiffStart < 0) return out;
 
