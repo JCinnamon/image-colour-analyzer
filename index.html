@@ -474,7 +474,9 @@
         <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF metadata (GPS, date, camera) is read from JPEGs and from PNGs that carry an eXIf chunk, including cut-outs exported by Image Cutter with GPS/EXIF preserved.</li>
         <li><strong>Image URLs</strong> — direct links to .jpg, .jpeg, .png, .webp, .gif, or .bmp files. The image host must permit cross-origin access (CORS); images that block it will fail with a clear message.</li>
         <li><strong>PNG transparency is respected</strong> — choose whether transparent areas are composited onto white, black, or grey, or excluded entirely so only opaque pixels are analysed.</li>
-        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level and hue-histogram tables, each downloadable as CSV.</li>
+        <li><strong>Image-level metrics</strong> — mean and median hue, saturation, value, CIELAB L* and C*ab, with spread (std and IQR) and hue circular variance; plus colourfulness, redness index, correlated colour temperature (CCT), RMS contrast, dark-channel haze, warm/cool/neutral proportions, and hue entropy.</li>
+        <li><strong>Spatial structure (optional)</strong> — row and column colour profiles, an N×N grid/tile table, per-cluster centroid and spatial spread, and Moran's I spatial autocorrelation of lightness.</li>
+        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, hue-histogram, and spatial (profiles, grid) tables, each downloadable as CSV. Palette and quantized-image montages export as PNG or JPG.</li>
       </ul>
     </div>
   </details>
@@ -553,7 +555,20 @@
           <label><input type="checkbox" id="includeExif" checked> Extract EXIF (GPS, date, camera)</label>
           <label><input type="checkbox" id="includeHistogram"> Hue histogram table</label>
           <label><input type="checkbox" id="includePixel"> Pixel-level table (large!)</label>
+          <label><input type="checkbox" id="includeSpatial"> Spatial structure (profiles, grid, Moran's I)</label>
         </div>
+      </div>
+
+      <div class="field full-width" id="pixelStepField">
+        <label for="pixelStep">Pixel table: keep every Nth pixel</label>
+        <input type="number" id="pixelStep" value="1" min="1" max="200" step="1" style="max-width:120px">
+        <div class="hint">Subsample the pixel-level export to cap file size (1 = every analysed pixel; higher = smaller file)</div>
+      </div>
+
+      <div class="field full-width" id="gridSizeField">
+        <label for="gridSize">Spatial grid size (N × N cells)</label>
+        <input type="number" id="gridSize" value="8" min="2" max="64" step="1" style="max-width:120px">
+        <div class="hint">Cell grid used for the grid/tile table and Moran's I spatial autocorrelation</div>
       </div>
 
     </div>
@@ -577,7 +592,7 @@
 </div>
 
 <footer class="page-footer">
-  <strong>Batch Image Analyzer</strong> · part of <a href="https://www.jonathancinnamon.com/vis-o-matic/">Vis-O-Matic</a>, with <a href="https://www.jonathancinnamon.com/image-cutter/">Image Cutter</a> and <a href="https://www.jonathancinnamon.com/image-colour-visualizer/">Image Visualizer</a><br>All analysis runs locally; no images are uploaded. K-means clustering with HSV, LAB and LCH values, whole-image metrics, EXIF extraction and full PNG transparency support.<br><a href="https://www.jonathancinnamon.com">Jonathan Cinnamon</a>, Geography, UBC Okanagan
+  <strong>Batch Image Analyzer</strong> · part of <a href="https://www.jonathancinnamon.com/vis-o-matic/">Vis-O-Matic</a>, with <a href="https://www.jonathancinnamon.com/image-cutter/">Image Cutter</a> and <a href="https://www.jonathancinnamon.com/image-colour-visualizer/">Image Visualizer</a><br>All analysis runs locally; no images are uploaded. K-means clustering with HSV, LAB and LCH values; whole-image metrics (perceptual L*/C*ab with medians and spread, colourfulness, redness, CCT, RMS contrast, dark-channel haze, warm/cool/neutral, hue entropy and circular variance); optional spatial structure (profiles, grid, Moran's I); EXIF extraction and full PNG transparency support.<br><a href="https://www.jonathancinnamon.com">Jonathan Cinnamon</a>, Geography, UBC Okanagan
 </footer>
 
 <script>
@@ -645,6 +660,23 @@ function labToLch(L, a, b) {
   let H = Math.atan2(b, a) * 180 / Math.PI;
   if (H < 0) H += 360;
   return [Math.round(C * 100) / 100, Math.round(H * 100) / 100];
+}
+
+// Correlated colour temperature (K) from mean RGB, via CIE xy + McCamy's approximation
+function rgbToCCT(r, g, b) {
+  const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const R = lin(r), G = lin(g), B = lin(b);
+  const X = R * 0.4124564 + G * 0.3575761 + B * 0.1804375;
+  const Y = R * 0.2126729 + G * 0.7151522 + B * 0.0721750;
+  const Z = R * 0.0193339 + G * 0.1191920 + B * 0.9503041;
+  const sum = X + Y + Z;
+  if (sum <= 0) return null;
+  const x = X / sum, y = Y / sum;
+  const denom = 0.1858 - y;
+  if (Math.abs(denom) < 1e-9) return null;
+  const nn = (x - 0.3320) / denom;
+  const cct = 449 * nn ** 3 + 3525 * nn ** 2 + 6823.3 * nn + 5520.33;
+  return (cct > 0 && cct < 100000) ? Math.round(cct) : null;
 }
 
 // ── K-means (k-means++ init, fixed seed) ────────────────────────────
@@ -725,6 +757,19 @@ function kmeans(pixels, k, seed = 42, maxIter = 40) {
 }
 
 // ── Whole-image summary metrics ─────────────────────────────────────
+// Median, IQR and standard deviation of a 1-D numeric array
+function stats1d(arr) {
+  const n = arr.length;
+  if (!n) return { median: null, iqr: null, std: null };
+  const a = Array.prototype.slice.call(arr).sort((x, y) => x - y);
+  const q = p => { const idx = (a.length - 1) * p, lo = Math.floor(idx), hi = Math.ceil(idx);
+    return a[lo] + (a[hi] - a[lo]) * (idx - lo); };
+  const median = q(0.5), iqr = q(0.75) - q(0.25);
+  let m = 0; for (let i = 0; i < n; i++) m += a[i]; m /= n;
+  let v = 0; for (let i = 0; i < n; i++) { const d = a[i] - m; v += d * d; } v /= n;
+  return { median, iqr, std: Math.sqrt(v) };
+}
+
 function imageMetrics(pixels) {
   const n = pixels.length / 3;
   if (n === 0) return null;
@@ -734,6 +779,10 @@ function imageMetrics(pixels) {
   let sumS = 0, sumV = 0;
   let warm = 0, cool = 0, neutral = 0;
   let sumRg = 0, sumYb = 0, sumRg2 = 0, sumYb2 = 0;
+  let sumL = 0, sumC = 0;
+  let sumY = 0, sumY2 = 0, sumDark = 0;
+  const arrS = new Float32Array(n), arrV = new Float32Array(n);
+  const arrL = new Float32Array(n), arrC = new Float32Array(n);
   const hueBins = new Float64Array(36);
   const satBins = new Float64Array(20);
   const valBins = new Float64Array(20);
@@ -745,6 +794,13 @@ function imageMetrics(pixels) {
 
     const [h, s, v] = rgbToHsv(r, g, b);
     sumS += s; sumV += v;
+    const [Lp, Ap, Bp] = rgbToLab(r, g, b);
+    const Cp = Math.sqrt(Ap * Ap + Bp * Bp);
+    sumL += Lp; sumC += Cp;
+    arrS[i] = s; arrV[i] = v; arrL[i] = Lp; arrC[i] = Cp;
+    const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b;   // Rec.709 luminance
+    sumY += Y; sumY2 += Y * Y;
+    sumDark += Math.min(r, g, b);                      // dark-channel (per-pixel)
     satBins[Math.min(19, Math.floor(s / 5))]++;
     valBins[Math.min(19, Math.floor(v / 5))]++;
 
@@ -793,15 +849,38 @@ function imageMetrics(pixels) {
     entropy = Math.round((e / Math.log2(36)) * 1000) / 1000;
   }
 
+  // Perceptual central tendency + spread; medians resist sun/obstruction outliers
+  const sS = stats1d(arrS), sV = stats1d(arrV), sL = stats1d(arrL), sC = stats1d(arrC);
+  const R = hueN > 0 ? Math.sqrt(sumSin * sumSin + sumCos * sumCos) / hueN : 0;
+  const hueCircVar = hueN > 0 ? Math.round((1 - R) * 1000) / 1000 : null;
+  const r1 = x => x == null ? null : Math.round(x * 10) / 10;
+  const r2 = x => x == null ? null : Math.round(x * 100) / 100;
+  const r3 = x => x == null ? null : Math.round(x * 1000) / 1000;
+
+  // New scene descriptors
+  const meanR = sumR / n, meanG = sumG / n, meanB = sumB / n;
+  const redness = (meanR + meanB) > 0 ? r3((meanR - meanB) / (meanR + meanB)) : 0;
+  const meanY = sumY / n, varY = Math.max(0, sumY2 / n - meanY * meanY);
+  const rms_contrast = meanY > 0 ? r3(Math.sqrt(varY) / meanY) : 0;
+  const dark_channel = r3((sumDark / n) / 255);
+  const cct = rgbToCCT(meanR, meanG, meanB);
+
   const pct = x => Math.round((x / n) * 1000) / 10;
   return {
     mean_r: Math.round(sumR / n), mean_g: Math.round(sumG / n), mean_b: Math.round(sumB / n),
     mean_hue: meanHue,
     mean_saturation: Math.round((sumS / n) * 10) / 10,
+    median_saturation: r1(sS.median), saturation_std: r1(sS.std), saturation_iqr: r1(sS.iqr),
     mean_value: Math.round((sumV / n) * 10) / 10,
+    median_value: r1(sV.median),
+    mean_lightness: r2(sumL / n), median_lightness: r2(sL.median),
+    mean_chroma: r2(sumC / n), median_chroma: r2(sC.median),
+    chroma_std: r2(sC.std), chroma_iqr: r2(sC.iqr),
     colourfulness,
+    redness, cct, rms_contrast, dark_channel,
     warm_pct: pct(warm), cool_pct: pct(cool), neutral_pct: pct(neutral),
     hue_entropy: entropy,
+    hue_circular_variance: hueCircVar,
     hue_bins: Array.from(hueBins),
     sat_bins: Array.from(satBins),
     val_bins: Array.from(valBins),
@@ -936,10 +1015,74 @@ function parseExif(buffer) {
   return out;
 }
 
+// ── Spatial structure (row/col profiles, grid, cluster centroids, Moran's I) ──
+function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridN, nAnalyzed) {
+  const px = i => coords ? coords[i * 2] : (i % w);
+  const py = i => coords ? coords[i * 2 + 1] : Math.floor(i / w);
+  const rowN = new Float64Array(h), rowR = new Float64Array(h), rowG = new Float64Array(h), rowB = new Float64Array(h);
+  const colN = new Float64Array(w), colR = new Float64Array(w), colG = new Float64Array(w), colB = new Float64Array(w);
+  const G = Math.max(2, gridN | 0);
+  const cN = new Float64Array(G * G), cR = new Float64Array(G * G), cG = new Float64Array(G * G), cB = new Float64Array(G * G);
+  const K = clusters.length;
+  const kmRank = {}; clusters.forEach((c, idx) => { kmRank[c._kmIndex] = idx; });
+  const kX = new Float64Array(K), kY = new Float64Array(K), kX2 = new Float64Array(K), kY2 = new Float64Array(K), kN = new Float64Array(K);
+
+  for (let i = 0; i < nAnalyzed; i++) {
+    const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
+    const x = px(i), y = py(i);
+    if (y >= 0 && y < h) { rowN[y]++; rowR[y] += r; rowG[y] += g; rowB[y] += b; }
+    if (x >= 0 && x < w) { colN[x]++; colR[x] += r; colG[x] += g; colB[x] += b; }
+    const gx = Math.min(G - 1, Math.floor(x / w * G)), gy = Math.min(G - 1, Math.floor(y / h * G));
+    const ci = gy * G + gx; cN[ci]++; cR[ci] += r; cG[ci] += g; cB[ci] += b;
+    if (kmLabels) { const rank = kmRank[kmLabels[i]]; if (rank != null) { kX[rank] += x; kY[rank] += y; kX2[rank] += x * x; kY2[rank] += y * y; kN[rank]++; } }
+  }
+
+  const derive = (mr, mg, mb) => {
+    const [hh, ss, vv] = rgbToHsv(mr, mg, mb);
+    const [L, A, Bb] = rgbToLab(mr, mg, mb);
+    const [C] = labToLch(L, A, Bb);
+    return { mean_r: Math.round(mr), mean_g: Math.round(mg), mean_b: Math.round(mb), hue: hh, saturation: ss, value: vv, lightness: L, chroma: C };
+  };
+  const profile = (N, R, Gc, B) => { const out = [];
+    for (let k = 0; k < N.length; k++) { if (!N[k]) continue; const o = derive(R[k] / N[k], Gc[k] / N[k], B[k] / N[k]); o.index = k; o.n = N[k]; out.push(o); } return out; };
+  const rows = profile(rowN, rowR, rowG, rowB);
+  const cols = profile(colN, colR, colG, colB);
+
+  const grid = []; const field = new Float64Array(G * G).fill(NaN);
+  for (let ci = 0; ci < G * G; ci++) { if (!cN[ci]) continue;
+    const o = derive(cR[ci] / cN[ci], cG[ci] / cN[ci], cB[ci] / cN[ci]);
+    o.cell_x = ci % G; o.cell_y = (ci / G) | 0; o.n = cN[ci]; grid.push(o); field[ci] = o.lightness; }
+
+  // Moran's I of the cell lightness field, rook contiguity
+  let morans_i = null;
+  const valid = []; for (let ci = 0; ci < G * G; ci++) if (!isNaN(field[ci])) valid.push(ci);
+  if (valid.length > 2) {
+    let mean = 0; for (const ci of valid) mean += field[ci]; mean /= valid.length;
+    let num = 0, den = 0, W = 0;
+    for (const ci of valid) { const d = field[ci] - mean; den += d * d; }
+    for (const ci of valid) { const gx = ci % G, gy = (ci / G) | 0, di = field[ci] - mean;
+      for (const [nx, ny] of [[gx - 1, gy], [gx + 1, gy], [gx, gy - 1], [gx, gy + 1]]) {
+        if (nx < 0 || ny < 0 || nx >= G || ny >= G) continue; const nj = ny * G + nx;
+        if (isNaN(field[nj])) continue; num += di * (field[nj] - mean); W++; } }
+    if (den > 0 && W > 0) morans_i = Math.round((valid.length / W) * (num / den) * 1000) / 1000;
+  }
+
+  const diag = Math.sqrt(w * w + h * h);
+  if (kmLabels) clusters.forEach((c, idx) => { const n = kN[idx]; if (!n) return;
+    const cx = kX[idx] / n, cy = kY[idx] / n;
+    const spread = Math.sqrt(Math.max(0, (kX2[idx] / n - cx * cx) + (kY2[idx] / n - cy * cy)));
+    c.centroid_x = Math.round(cx); c.centroid_y = Math.round(cy);
+    c.centroid_x_rel = Math.round(cx / w * 1000) / 1000; c.centroid_y_rel = Math.round(cy / h * 1000) / 1000;
+    c.spatial_spread_rel = Math.round(spread / diag * 1000) / 1000; });
+
+  return { rows, cols, grid, morans_i, gridN: G };
+}
+
 // ── Build analysis for one set of pixels ────────────────────────────
 // rgba: Uint8ClampedArray (RGBA), w/h at analysis resolution
 function analyzePixels(rgba, w, h, opts) {
-  const { numClusters, transparencyBg, includePixel } = opts;
+  const { numClusters, transparencyBg, includePixel, includeLab = true, pixelStep = 1,
+          includeSpatial = false, gridSize = 8 } = opts;
   const bgColors = { white: [255, 255, 255], black: [0, 0, 0], gray: [128, 128, 128] };
 
   const nAll = w * h;
@@ -1026,7 +1169,7 @@ function analyzePixels(rgba, w, h, opts) {
     const kmIndexToRank = {};
     clusters.forEach(cl => { kmIndexToRank[cl._kmIndex] = cl; });
     pixelRows = [];
-    for (let i = 0; i < nAnalyzed; i++) {
+    for (let i = 0; i < nAnalyzed; i += pixelStep) {
       const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
       const [hh, ss, vv] = rgbToHsv(r, g, b);
       const row = {
@@ -1034,6 +1177,11 @@ function analyzePixels(rgba, w, h, opts) {
         y: coords ? coords[i * 2 + 1] : Math.floor(i / w),
         hex: rgbToHex(r, g, b), r, g, b, h: hh, s: ss, v: vv,
       };
+      if (includeLab) {
+        const [Lp, Ap, Bp] = rgbToLab(r, g, b);
+        const [Cp, Hp] = labToLch(Lp, Ap, Bp);
+        row.lab_l = Lp; row.lab_a = Ap; row.lab_b = Bp; row.lch_c = Cp; row.lch_h = Hp;
+      }
       if (km) {
         const cl = kmIndexToRank[km.labels[i]];
         row.cluster_id = cl.cluster;
@@ -1043,7 +1191,26 @@ function analyzePixels(rgba, w, h, opts) {
     }
   }
 
-  return { clusters, metrics, pixelRows, analyzedW: w, analyzedH: h };
+  // Spatial structure (attaches centroids to clusters, returns profiles/grid/Moran's I)
+  let spatial = null;
+  if (includeSpatial) {
+    spatial = computeSpatial(pixels, coords, w, h, km ? km.labels : null, clusters, gridSize, nAnalyzed);
+    metrics.morans_i = spatial.morans_i;
+  }
+
+  // Compact quantized representation for image export (each pixel → its cluster colour)
+  let quant = null;
+  if (km) {
+    const kmToRgb = {}; clusters.forEach(c => { kmToRgb[c._kmIndex] = [c.red, c.green, c.blue]; });
+    const colors = new Uint8ClampedArray(nAnalyzed * 3);
+    for (let i = 0; i < nAnalyzed; i++) {
+      const rgb = kmToRgb[km.labels[i]] || [0, 0, 0];
+      colors[i * 3] = rgb[0]; colors[i * 3 + 1] = rgb[1]; colors[i * 3 + 2] = rgb[2];
+    }
+    quant = { w, h, coords: coords || null, colors, n: nAnalyzed };
+  }
+
+  return { clusters, metrics, pixelRows, spatial, quant, analyzedW: w, analyzedH: h };
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1215,6 +1382,9 @@ async function analyzeImages() {
     includeExif:    document.getElementById('includeExif').checked,
     includeHistogram: document.getElementById('includeHistogram').checked,
     includePixel:   document.getElementById('includePixel').checked,
+    pixelStep:      Math.max(1, parseInt(document.getElementById('pixelStep').value, 10) || 1),
+    includeSpatial: document.getElementById('includeSpatial').checked,
+    gridSize:       Math.max(2, parseInt(document.getElementById('gridSize').value, 10) || 8),
   };
 
   if (opts.includePixel && sources.length * opts.precision * opts.precision > 2_000_000) {
@@ -1275,7 +1445,7 @@ async function analyzeImages() {
         width: img.naturalWidth, height: img.naturalHeight,
         analyzedW: result.analyzedW, analyzedH: result.analyzedH,
         exif, clusters: result.clusters, metrics: result.metrics,
-        pixelRows: result.pixelRows, thumbUrl, label: src.label,
+        pixelRows: result.pixelRows, spatial: result.spatial, quant: result.quant, thumbUrl, label: src.label,
       };
       window._results.push(record);
       cards.push({ ok: true, record });
@@ -1315,6 +1485,16 @@ function renderResults(cards, total, ok, failed, opts) {
       html += `<button class="btn btn-outline btn-sm" onclick="downloadHistogramCSV()">⬇ Hue histogram CSV</button>`;
     if (opts.includePixel)
       html += `<button class="btn btn-outline btn-sm" onclick="downloadPixelCSV()">⬇ Pixel CSV</button>`;
+    if (opts.includeSpatial) {
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadProfilesCSV()">⬇ Row/Col profiles CSV</button>`;
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadGridCSV()">⬇ Grid CSV</button>`;
+    }
+    if (opts.numClusters >= 2) {
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadPaletteImage('png')">⬇ Palette PNG</button>`;
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadPaletteImage('jpg')">⬇ Palette JPG</button>`;
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadQuantizedImage('png')">⬇ Quantized PNG</button>`;
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadQuantizedImage('jpg')">⬇ Quantized JPG</button>`;
+    }
     html += `</div>`;
   }
   html += `</div>`;
@@ -1598,10 +1778,12 @@ function todayStamp() {
 
 function downloadClusterCSV() {
   const includeLab = document.getElementById('includeLab').checked;
+  const includeSpatial = document.getElementById('includeSpatial').checked;
   const header = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels',
     'cluster', 'hex', 'red', 'green', 'blue', 'hue', 'saturation', 'value'];
   if (includeLab) header.push('lab_l', 'lab_a', 'lab_b', 'lch_c', 'lch_h');
   header.push('percentage', 'pixel_count');
+  if (includeSpatial) header.push('centroid_x', 'centroid_y', 'centroid_x_rel', 'centroid_y_rel', 'spatial_spread_rel');
 
   const rows = [];
   for (const r of window._results) {
@@ -1610,6 +1792,7 @@ function downloadClusterCSV() {
         c.cluster, c.hex, c.red, c.green, c.blue, c.hue, c.saturation, c.value];
       if (includeLab) row.push(c.lab_l, c.lab_a, c.lab_b, c.lch_c, c.lch_h);
       row.push(c.percentage, c.pixel_count);
+      if (includeSpatial) row.push(c.centroid_x ?? '', c.centroid_y ?? '', c.centroid_x_rel ?? '', c.centroid_y_rel ?? '', c.spatial_spread_rel ?? '');
       rows.push(row);
     }
   }
@@ -1617,19 +1800,37 @@ function downloadClusterCSV() {
 }
 
 function downloadImageCSV() {
+  const includeLab = document.getElementById('includeLab').checked;
+  const includeSpatial = document.getElementById('includeSpatial').checked;
+  const labHead = includeLab
+    ? ['mean_lightness', 'median_lightness', 'mean_chroma', 'median_chroma', 'chroma_std', 'chroma_iqr'] : [];
   const header = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels', 'opaque_pct',
     'exif_datetime', 'gps_lat', 'gps_lon', 'gps_alt', 'camera_make', 'camera_model', 'orientation',
-    'mean_r', 'mean_g', 'mean_b', 'mean_hue', 'mean_saturation', 'mean_value',
-    'colourfulness', 'warm_pct', 'cool_pct', 'neutral_pct', 'hue_entropy'];
-  const rows = window._results.map(r => [
-    r.id, r.filename, r.source, r.width, r.height, r.metrics.analyzed_pixels, r.metrics.opaque_pct,
-    r.exif.datetime ?? '', r.exif.gps_lat ?? '', r.exif.gps_lon ?? '', r.exif.gps_alt ?? '',
-    r.exif.make ?? '', r.exif.model ?? '', r.exif.orientation ?? '',
-    r.metrics.mean_r, r.metrics.mean_g, r.metrics.mean_b,
-    r.metrics.mean_hue ?? '', r.metrics.mean_saturation, r.metrics.mean_value,
-    r.metrics.colourfulness, r.metrics.warm_pct, r.metrics.cool_pct, r.metrics.neutral_pct,
-    r.metrics.hue_entropy ?? '',
-  ]);
+    'mean_r', 'mean_g', 'mean_b', 'mean_hue',
+    'mean_saturation', 'median_saturation', 'saturation_std', 'saturation_iqr',
+    'mean_value', 'median_value',
+    ...labHead,
+    'colourfulness', 'redness', 'cct', 'rms_contrast', 'dark_channel',
+    'warm_pct', 'cool_pct', 'neutral_pct', 'hue_entropy', 'hue_circular_variance',
+    ...(includeSpatial ? ['morans_i'] : [])];
+  const rows = window._results.map(r => {
+    const m = r.metrics;
+    const labVals = includeLab
+      ? [m.mean_lightness ?? '', m.median_lightness ?? '', m.mean_chroma ?? '', m.median_chroma ?? '', m.chroma_std ?? '', m.chroma_iqr ?? '']
+      : [];
+    return [
+      r.id, r.filename, r.source, r.width, r.height, m.analyzed_pixels, m.opaque_pct,
+      r.exif.datetime ?? '', r.exif.gps_lat ?? '', r.exif.gps_lon ?? '', r.exif.gps_alt ?? '',
+      r.exif.make ?? '', r.exif.model ?? '', r.exif.orientation ?? '',
+      m.mean_r, m.mean_g, m.mean_b, m.mean_hue ?? '',
+      m.mean_saturation, m.median_saturation ?? '', m.saturation_std ?? '', m.saturation_iqr ?? '',
+      m.mean_value, m.median_value ?? '',
+      ...labVals,
+      m.colourfulness, m.redness ?? '', m.cct ?? '', m.rms_contrast ?? '', m.dark_channel ?? '',
+      m.warm_pct, m.cool_pct, m.neutral_pct, m.hue_entropy ?? '', m.hue_circular_variance ?? '',
+      ...(includeSpatial ? [m.morans_i ?? ''] : []),
+    ];
+  });
   downloadCSVText(buildCSV(header, rows), `colour_image-summary_${todayStamp()}.csv`);
 }
 
@@ -1648,16 +1849,20 @@ function downloadHistogramCSV() {
 }
 
 function downloadPixelCSV() {
+  const includeLab = document.getElementById('includeLab').checked;
   const header = ['image_id', 'filename', 'x', 'y', 'pixel_hex', 'pixel_r', 'pixel_g', 'pixel_b',
-    'pixel_hue', 'pixel_saturation', 'pixel_value', 'cluster_id', 'cluster_hex'];
+    'pixel_hue', 'pixel_saturation', 'pixel_value',
+    ...(includeLab ? ['pixel_lab_l', 'pixel_lab_a', 'pixel_lab_b', 'pixel_lch_c', 'pixel_lch_h'] : []),
+    'cluster_id', 'cluster_hex'];
   const parts = [header.join(',') + '\n'];
   let count = 0;
   for (const r of window._results) {
     if (!r.pixelRows) continue;
-    const chunk = r.pixelRows.map(p =>
-      [r.id, csvEscape(r.filename), p.x, p.y, p.hex, p.r, p.g, p.b, p.h, p.s, p.v,
-       p.cluster_id ?? '', p.cluster_hex ?? ''].join(',')
-    ).join('\n');
+    const chunk = r.pixelRows.map(p => {
+      const lab = includeLab ? [p.lab_l ?? '', p.lab_a ?? '', p.lab_b ?? '', p.lch_c ?? '', p.lch_h ?? ''] : [];
+      return [r.id, csvEscape(r.filename), p.x, p.y, p.hex, p.r, p.g, p.b, p.h, p.s, p.v,
+       ...lab, p.cluster_id ?? '', p.cluster_hex ?? ''].join(',');
+    }).join('\n');
     parts.push(chunk + '\n');
     count += r.pixelRows.length;
   }
@@ -1667,6 +1872,91 @@ function downloadPixelCSV() {
   }
   log(`Pixel CSV: ${count} rows`);
   downloadBlob(new Blob(parts, { type: 'text/csv;charset=utf-8' }), `colour_pixels_${todayStamp()}.csv`);
+}
+
+function downloadProfilesCSV() {
+  const header = ['image_id', 'filename', 'axis', 'index', 'n',
+    'mean_r', 'mean_g', 'mean_b', 'hue', 'saturation', 'value', 'lightness', 'chroma'];
+  const rows = [];
+  for (const r of window._results) {
+    if (!r.spatial) continue;
+    for (const o of r.spatial.rows) rows.push([r.id, r.filename, 'row', o.index, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.chroma]);
+    for (const o of r.spatial.cols) rows.push([r.id, r.filename, 'col', o.index, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.chroma]);
+  }
+  if (!rows.length) { setStatus('No spatial data — enable "Spatial structure" before analysing.', 'warning'); return; }
+  downloadCSVText(buildCSV(header, rows), `colour_profiles_${todayStamp()}.csv`);
+}
+
+function downloadGridCSV() {
+  const header = ['image_id', 'filename', 'grid_n', 'cell_x', 'cell_y', 'n',
+    'mean_r', 'mean_g', 'mean_b', 'hue', 'saturation', 'value', 'lightness'];
+  const rows = [];
+  for (const r of window._results) {
+    if (!r.spatial) continue;
+    for (const o of r.spatial.grid) rows.push([r.id, r.filename, r.spatial.gridN, o.cell_x, o.cell_y, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness]);
+  }
+  if (!rows.length) { setStatus('No spatial data — enable "Spatial structure" before analysing.', 'warning'); return; }
+  downloadCSVText(buildCSV(header, rows), `colour_grid_${todayStamp()}.csv`);
+}
+
+// Palette montage — one proportional dominant-colour strip per image
+function downloadPaletteImage(fmt) {
+  const res = (window._results || []).filter(r => r.clusters && r.clusters.length);
+  if (!res.length) { setStatus('No clusters to render — set clusters ≥ 2.', 'warning'); return; }
+  const rowH = 34, labelW = 210, stripW = 520, pad = 8;
+  const cv = document.createElement('canvas');
+  cv.width = labelW + stripW + pad * 2;
+  cv.height = res.length * rowH + pad * 2;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.font = '12px sans-serif'; ctx.textBaseline = 'middle';
+  res.forEach((r, i) => {
+    const y = pad + i * rowH;
+    ctx.fillStyle = '#333';
+    const name = r.filename.length > 30 ? r.filename.slice(0, 29) + '…' : r.filename;
+    ctx.fillText(name, pad, y + rowH / 2);
+    let x = pad + labelW;
+    const total = r.clusters.reduce((a, c) => a + c.pixel_count, 0) || 1;
+    for (const c of r.clusters) {
+      const wSeg = (c.pixel_count / total) * stripW;
+      ctx.fillStyle = c.hex; ctx.fillRect(x, y + 4, Math.max(0, wSeg), rowH - 8);
+      x += wSeg;
+    }
+  });
+  const jpg = fmt === 'jpg';
+  cv.toBlob(b => downloadBlob(b, `colour_palettes_${todayStamp()}.${jpg ? 'jpg' : 'png'}`), jpg ? 'image/jpeg' : 'image/png', 0.92);
+}
+
+// Quantized montage — each image recoloured to its k dominant clusters
+function downloadQuantizedImage(fmt) {
+  const res = (window._results || []).filter(r => r.quant);
+  if (!res.length) { setStatus('No quantized data — set clusters ≥ 2.', 'warning'); return; }
+  const thumb = 150, cols = Math.min(res.length, 5), rowsN = Math.ceil(res.length / cols), pad = 8, gap = 6;
+  const cv = document.createElement('canvas');
+  cv.width = pad * 2 + cols * thumb + (cols - 1) * gap;
+  cv.height = pad * 2 + rowsN * thumb + (rowsN - 1) * gap;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  res.forEach((r, idx) => {
+    const q = r.quant;
+    const off = document.createElement('canvas'); off.width = q.w; off.height = q.h;
+    const octx = off.getContext('2d'); const img = octx.createImageData(q.w, q.h);
+    for (let p = 0; p < q.w * q.h; p++) { img.data[p * 4] = 255; img.data[p * 4 + 1] = 255; img.data[p * 4 + 2] = 255; img.data[p * 4 + 3] = 255; }
+    for (let i = 0; i < q.n; i++) {
+      const x = q.coords ? q.coords[i * 2] : (i % q.w);
+      const y = q.coords ? q.coords[i * 2 + 1] : Math.floor(i / q.w);
+      if (x < 0 || y < 0 || x >= q.w || y >= q.h) continue;
+      const o = (y * q.w + x) * 4;
+      img.data[o] = q.colors[i * 3]; img.data[o + 1] = q.colors[i * 3 + 1]; img.data[o + 2] = q.colors[i * 3 + 2]; img.data[o + 3] = 255;
+    }
+    octx.putImageData(img, 0, 0);
+    const c = idx % cols, rr = Math.floor(idx / cols);
+    const dx = pad + c * (thumb + gap), dy = pad + rr * (thumb + gap);
+    const scale = Math.min(thumb / q.w, thumb / q.h), dw = q.w * scale, dh = q.h * scale;
+    ctx.drawImage(off, dx + (thumb - dw) / 2, dy + (thumb - dh) / 2, dw, dh);
+  });
+  const jpg = fmt === 'jpg';
+  cv.toBlob(b => downloadBlob(b, `colour_quantized_${todayStamp()}.${jpg ? 'jpg' : 'png'}`), jpg ? 'image/jpeg' : 'image/png', 0.92);
 }
 </script>
 </body>
