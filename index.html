@@ -476,7 +476,7 @@
         <li><strong>PNG transparency is respected</strong> — choose whether transparent areas are composited onto white, black, or grey, or excluded entirely so only opaque pixels are analysed.</li>
         <li><strong>Image-level metrics</strong> — mean and median hue, saturation, value, CIELAB L* and C*ab, with spread (std and IQR) and hue circular variance; plus colourfulness, redness index, correlated colour temperature (CCT), RMS contrast, dark-channel haze, warm/cool/neutral proportions, and hue entropy.</li>
         <li><strong>Spatial structure (optional)</strong> — row and column colour profiles, an N×N grid/tile table, per-cluster centroid and spatial spread, and Moran's I spatial autocorrelation of lightness.</li>
-        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, hue-histogram, and spatial (profiles, grid) tables, each downloadable as CSV. Palette and quantized-image montages export as PNG or JPG.</li>
+        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, hue-histogram, and spatial (profiles, grid) tables, each downloadable as CSV with consistent SPACE_CHANNEL_STAT column names (e.g. HSV_V_mean, LAB_L_median, LCH_C_mean). Per-image visualizations (palette, cluster-region, grid, row/column profile, and H/S/V histogram) open from a dropdown on each result and download as PNG.</li>
       </ul>
     </div>
   </details>
@@ -554,21 +554,12 @@
           <label><input type="checkbox" id="includeLab" checked> LAB / LCH colour values</label>
           <label><input type="checkbox" id="includeExif" checked> Extract EXIF (GPS, date, camera)</label>
           <label><input type="checkbox" id="includeHistogram"> Hue histogram table</label>
-          <label><input type="checkbox" id="includePixel"> Pixel-level table (large!)</label>
-          <label><input type="checkbox" id="includeSpatial"> Spatial structure (profiles, grid, Moran's I)</label>
+          <label><input type="checkbox" id="includePixel" onchange="toggleOpt()"> Pixel-level table (large!)
+            <input type="number" id="pixelStep" value="1" min="1" max="200" step="1" disabled title="keep every Nth pixel" style="max-width:64px;margin-left:5px"></label>
+          <label><input type="checkbox" id="includeSpatial" onchange="toggleOpt()"> Spatial structure (profiles, grid, Moran's I)
+            <input type="number" id="gridSize" value="8" min="2" max="64" step="1" disabled title="grid size N×N" style="max-width:64px;margin-left:5px"></label>
         </div>
-      </div>
-
-      <div class="field full-width" id="pixelStepField">
-        <label for="pixelStep">Pixel table: keep every Nth pixel</label>
-        <input type="number" id="pixelStep" value="1" min="1" max="200" step="1" style="max-width:120px">
-        <div class="hint">Subsample the pixel-level export to cap file size (1 = every analysed pixel; higher = smaller file)</div>
-      </div>
-
-      <div class="field full-width" id="gridSizeField">
-        <label for="gridSize">Spatial grid size (N × N cells)</label>
-        <input type="number" id="gridSize" value="8" min="2" max="64" step="1" style="max-width:120px">
-        <div class="hint">Cell grid used for the grid/tile table and Moran's I spatial autocorrelation</div>
+        <div class="hint">Pixel table: the number keeps every Nth analysed pixel (caps file size). Spatial: the number sets the N×N grid used for the grid table and Moran's I. Each input is enabled only when its box is ticked.</div>
       </div>
 
     </div>
@@ -770,6 +761,16 @@ function stats1d(arr) {
   return { median, iqr, std: Math.sqrt(v) };
 }
 
+// Circular median of angles (degrees): shift about the circular mean, take the linear median, wrap back
+function circMedian(anglesDeg, meanDeg) {
+  if (!anglesDeg.length || meanDeg == null) return null;
+  const a = anglesDeg.map(x => ((x - meanDeg + 540) % 360) - 180).sort((p, q) => p - q);
+  const idx = (a.length - 1) * 0.5, lo = Math.floor(idx), hi = Math.ceil(idx);
+  const med = a[lo] + (a[hi] - a[lo]) * (idx - lo);
+  let mm = (meanDeg + med) % 360; if (mm < 0) mm += 360;
+  return mm;
+}
+
 function imageMetrics(pixels) {
   const n = pixels.length / 3;
   if (n === 0) return null;
@@ -779,10 +780,14 @@ function imageMetrics(pixels) {
   let sumS = 0, sumV = 0;
   let warm = 0, cool = 0, neutral = 0;
   let sumRg = 0, sumYb = 0, sumRg2 = 0, sumYb2 = 0;
-  let sumL = 0, sumC = 0;
+  let sumL = 0, sumC = 0, sumA = 0, sumBlab = 0;
+  let sumSinL = 0, sumCosL = 0, hueLN = 0;
   let sumY = 0, sumY2 = 0, sumDark = 0;
   const arrS = new Float32Array(n), arrV = new Float32Array(n);
   const arrL = new Float32Array(n), arrC = new Float32Array(n);
+  const arrR = new Float32Array(n), arrG = new Float32Array(n), arrB = new Float32Array(n);
+  const arrA = new Float32Array(n), arrBl = new Float32Array(n);
+  const arrHueCh = [], arrHlchCh = [];
   const hueBins = new Float64Array(36);
   const satBins = new Float64Array(20);
   const valBins = new Float64Array(20);
@@ -796,8 +801,9 @@ function imageMetrics(pixels) {
     sumS += s; sumV += v;
     const [Lp, Ap, Bp] = rgbToLab(r, g, b);
     const Cp = Math.sqrt(Ap * Ap + Bp * Bp);
-    sumL += Lp; sumC += Cp;
+    sumL += Lp; sumC += Cp; sumA += Ap; sumBlab += Bp;
     arrS[i] = s; arrV[i] = v; arrL[i] = Lp; arrC[i] = Cp;
+    arrR[i] = r; arrG[i] = g; arrB[i] = b; arrA[i] = Ap; arrBl[i] = Bp;
     const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b;   // Rec.709 luminance
     sumY += Y; sumY2 += Y * Y;
     sumDark += Math.min(r, g, b);                      // dark-channel (per-pixel)
@@ -811,6 +817,10 @@ function imageMetrics(pixels) {
       if (h < 90 || h >= 330) warm++; else cool++;
       hueBins[Math.min(35, Math.floor(h / 10))]++;
       hueBinN++;
+      arrHueCh.push(h);
+      let lchH = Math.atan2(Bp, Ap) * 180 / Math.PI; if (lchH < 0) lchH += 360;
+      sumSinL += Math.sin(lchH * Math.PI / 180); sumCosL += Math.cos(lchH * Math.PI / 180); hueLN++;
+      arrHlchCh.push(lchH);
     } else {
       neutral++;
     }
@@ -851,6 +861,11 @@ function imageMetrics(pixels) {
 
   // Perceptual central tendency + spread; medians resist sun/obstruction outliers
   const sS = stats1d(arrS), sV = stats1d(arrV), sL = stats1d(arrL), sC = stats1d(arrC);
+  const sR = stats1d(arrR), sG = stats1d(arrG), sB = stats1d(arrB), sA = stats1d(arrA), sBl = stats1d(arrBl);
+  const medHue = circMedian(arrHueCh, meanHue);
+  let meanLchH = null;
+  if (hueLN > 0) { meanLchH = Math.atan2(sumSinL / hueLN, sumCosL / hueLN) * 180 / Math.PI; if (meanLchH < 0) meanLchH += 360; }
+  const medLchH = circMedian(arrHlchCh, meanLchH);
   const R = hueN > 0 ? Math.sqrt(sumSin * sumSin + sumCos * sumCos) / hueN : 0;
   const hueCircVar = hueN > 0 ? Math.round((1 - R) * 1000) / 1000 : null;
   const r1 = x => x == null ? null : Math.round(x * 10) / 10;
@@ -868,14 +883,18 @@ function imageMetrics(pixels) {
   const pct = x => Math.round((x / n) * 1000) / 10;
   return {
     mean_r: Math.round(sumR / n), mean_g: Math.round(sumG / n), mean_b: Math.round(sumB / n),
-    mean_hue: meanHue,
+    median_r: Math.round(sR.median), median_g: Math.round(sG.median), median_b: Math.round(sB.median),
+    mean_hue: meanHue, median_hue: r1(medHue),
     mean_saturation: Math.round((sumS / n) * 10) / 10,
     median_saturation: r1(sS.median), saturation_std: r1(sS.std), saturation_iqr: r1(sS.iqr),
     mean_value: Math.round((sumV / n) * 10) / 10,
     median_value: r1(sV.median),
     mean_lightness: r2(sumL / n), median_lightness: r2(sL.median),
+    mean_lab_a: r2(sumA / n), median_lab_a: r2(sA.median),
+    mean_lab_b: r2(sumBlab / n), median_lab_b: r2(sBl.median),
     mean_chroma: r2(sumC / n), median_chroma: r2(sC.median),
     chroma_std: r2(sC.std), chroma_iqr: r2(sC.iqr),
+    mean_lch_h: r1(meanLchH), median_lch_h: r1(medLchH),
     colourfulness,
     redness, cct, rms_contrast, dark_channel,
     warm_pct: pct(warm), cool_pct: pct(cool), neutral_pct: pct(neutral),
@@ -1489,12 +1508,6 @@ function renderResults(cards, total, ok, failed, opts) {
       html += `<button class="btn btn-outline btn-sm" onclick="downloadProfilesCSV()">⬇ Row/Col profiles CSV</button>`;
       html += `<button class="btn btn-outline btn-sm" onclick="downloadGridCSV()">⬇ Grid CSV</button>`;
     }
-    if (opts.numClusters >= 2) {
-      html += `<button class="btn btn-outline btn-sm" onclick="downloadPaletteImage('png')">⬇ Palette PNG</button>`;
-      html += `<button class="btn btn-outline btn-sm" onclick="downloadPaletteImage('jpg')">⬇ Palette JPG</button>`;
-      html += `<button class="btn btn-outline btn-sm" onclick="downloadQuantizedImage('png')">⬇ Quantized PNG</button>`;
-      html += `<button class="btn btn-outline btn-sm" onclick="downloadQuantizedImage('jpg')">⬇ Quantized JPG</button>`;
-    }
     html += `</div>`;
   }
   html += `</div>`;
@@ -1550,17 +1563,22 @@ function renderResults(cards, total, ok, failed, opts) {
             <div class="img-url">${escapeHtml(r.label)} · ${r.width}×${r.height}px</div>
             ${exifBits.length ? `<div class="exif-line">${exifBits.join(' &nbsp; ')}</div>` : ''}
           </div>
-          ${r.clusters.length ? `<div class="card-actions">
-            <button class="btn btn-outline btn-sm" onclick="downloadPalettePNG(${r.id})">⬇ Palette PNG</button>
-          </div>` : ''}
         </div>
         <div class="metric-row">${chips.map(c => `<span class="metric-chip">${c}</span>`).join('')}</div>
         ${r.clusters.length ? `<div class="swatches">${renderSwatches(r.clusters)}</div>` : '<div style="padding:0.6rem"></div>'}
-        <details class="hist-details" ontoggle="if (this.open) drawHist('${r.id}')">
-          <summary>H/S/V histogram</summary>
+        <details class="hist-details" ontoggle="if (this.open) showViz(${r.id}, document.getElementById('vizsel-${r.id}').value)">
+          <summary>Visualizations</summary>
           <div class="hist-body">
-            <div class="hist-controls" id="histctl-${r.id}">${histControlsHtml(String(r.id))}</div>
-            <canvas id="hist-${r.id}" class="hist-canvas" width="660" height="200"></canvas>
+            <div class="viz-controls" style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">
+              <select id="vizsel-${r.id}" onchange="showViz(${r.id}, this.value)">
+                ${r.clusters.length ? '<option value="palette">Palette</option><option value="cluster">Cluster-region image</option>' : ''}
+                ${r.spatial ? '<option value="grid">Grid image</option><option value="profiles">Row/column profile</option>' : ''}
+                <option value="hist">H/S/V histogram</option>
+              </select>
+              <div id="vizctl-${r.id}"></div>
+              <button class="btn btn-outline btn-sm" onclick="downloadVizPNG(${r.id})">⬇ PNG</button>
+            </div>
+            <canvas id="viz-${r.id}" class="hist-canvas" width="660" height="240"></canvas>
           </div>
         </details>
       </div>`;
@@ -1745,7 +1763,106 @@ function downloadPalettePNG(id) {
   canvas.toBlob(blob => downloadBlob(blob, stripExt(r.filename) + '_palette.png'), 'image/png');
 }
 
+// ── Per-card visualization dropdown (palette, cluster-region, grid, profiles, histogram) ──
+window._vizState = window._vizState || {};
+function recById(id) { return (window._results || []).find(x => x.id === id); }
+function vizCanvas(id) { return document.getElementById('viz-' + id); }
+
+function showViz(id, kind) {
+  const prev = window._vizState[id] || {};
+  window._vizState[id] = { kind, channel: prev.channel || 'hue' };
+  const ctl = document.getElementById('vizctl-' + id);
+  if (ctl) ctl.innerHTML = (kind === 'hist')
+    ? ['hue', 'saturation', 'value'].map(ch =>
+        `<label style="font-size:0.72rem;margin-right:6px"><input type="radio" name="vizch-${id}" value="${ch}" ${window._vizState[id].channel === ch ? 'checked' : ''} onclick="setVizChannel(${id},'${ch}')"> ${ch}</label>`).join('')
+    : '';
+  drawViz(id);
+}
+function setVizChannel(id, ch) { if (window._vizState[id]) window._vizState[id].channel = ch; drawViz(id); }
+
+function hsvToRgbLocal(h, s, v) {
+  h /= 360; s /= 100; v /= 100;
+  const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  let r, g, b;
+  switch (i % 6) { case 0: r = v; g = t; b = p; break; case 1: r = q; g = v; b = p; break; case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break; case 4: r = t; g = p; b = v; break; default: r = v; g = p; b = q; }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+function drawViz(id) {
+  const r = recById(id), cv = vizCanvas(id); if (!r || !cv) return;
+  const st = window._vizState[id] || { kind: 'palette' };
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (st.kind === 'palette') drawVizPalette(ctx, cv, r);
+  else if (st.kind === 'cluster') drawVizImageData(ctx, cv, r.quant);
+  else if (st.kind === 'grid') drawVizGrid(ctx, cv, r);
+  else if (st.kind === 'profiles') drawVizProfiles(ctx, cv, r);
+  else drawVizHist(ctx, cv, r, st.channel || 'hue');
+}
+function drawVizPalette(ctx, cv, r) {
+  const cs = r.clusters || []; if (!cs.length) { ctx.fillStyle = '#999'; ctx.fillText('No clusters', 10, 20); return; }
+  const total = cs.reduce((a, c) => a + c.pixel_count, 0) || 1; let x = 8; const y = 8, h = cv.height - 40;
+  cs.forEach(c => { const w = (c.pixel_count / total) * (cv.width - 16); ctx.fillStyle = c.hex; ctx.fillRect(x, y, Math.max(0, w), h);
+    if (w > 34) { ctx.fillStyle = '#000'; ctx.font = '10px sans-serif'; ctx.fillText(c.percentage.toFixed(0) + '%', x + 3, y + h + 14); } x += w; });
+}
+function drawVizImageData(ctx, cv, q) {
+  if (!q) { ctx.fillStyle = '#999'; ctx.fillText('Enable clustering (clusters ≥ 2)', 10, 20); return; }
+  const off = document.createElement('canvas'); off.width = q.w; off.height = q.h;
+  const octx = off.getContext('2d'), img = octx.createImageData(q.w, q.h);
+  for (let p = 0; p < q.w * q.h; p++) { img.data[p * 4] = 255; img.data[p * 4 + 1] = 255; img.data[p * 4 + 2] = 255; img.data[p * 4 + 3] = 255; }
+  for (let i = 0; i < q.n; i++) {
+    const x = q.coords ? q.coords[i * 2] : (i % q.w), y = q.coords ? q.coords[i * 2 + 1] : Math.floor(i / q.w);
+    if (x < 0 || y < 0 || x >= q.w || y >= q.h) continue; const o = (y * q.w + x) * 4;
+    img.data[o] = q.colors[i * 3]; img.data[o + 1] = q.colors[i * 3 + 1]; img.data[o + 2] = q.colors[i * 3 + 2]; img.data[o + 3] = 255;
+  }
+  octx.putImageData(img, 0, 0);
+  const scale = Math.min((cv.width - 16) / q.w, (cv.height - 16) / q.h), dw = q.w * scale, dh = q.h * scale;
+  ctx.drawImage(off, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
+}
+function drawVizGrid(ctx, cv, r) {
+  if (!r.spatial) { ctx.fillStyle = '#999'; ctx.fillText('Enable Spatial structure', 10, 20); return; }
+  const G = r.spatial.gridN, cw = (cv.width - 16) / G, ch = (cv.height - 16) / G;
+  r.spatial.grid.forEach(o => { ctx.fillStyle = `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; ctx.fillRect(8 + o.cell_x * cw, 8 + o.cell_y * ch, Math.ceil(cw), Math.ceil(ch)); });
+}
+function drawVizProfiles(ctx, cv, r) {
+  if (!r.spatial) { ctx.fillStyle = '#999'; ctx.fillText('Enable Spatial structure', 10, 20); return; }
+  const cols = r.spatial.cols, rows = r.spatial.rows, halfH = (cv.height - 8) / 2;
+  ctx.fillStyle = '#333'; ctx.font = '10px sans-serif'; ctx.fillText('columns →', 8, 11);
+  const cw = (cv.width - 16) / (cols.length || 1);
+  cols.forEach((o, i) => { ctx.fillStyle = `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; ctx.fillRect(8 + i * cw, 15, Math.ceil(cw), halfH - 19); });
+  ctx.fillStyle = '#333'; ctx.fillText('rows ↓', 8, halfH + 11);
+  const rh = (halfH - 19) / (rows.length || 1);
+  rows.forEach((o, i) => { ctx.fillStyle = `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; ctx.fillRect(8, halfH + 15 + i * rh, cv.width - 16, Math.ceil(rh)); });
+}
+function drawVizHist(ctx, cv, r, channel) {
+  const m = r.metrics; let bins, nbins, colorFor;
+  if (channel === 'saturation') { bins = m.sat_bins; nbins = 20; colorFor = () => '#3a6ea5'; }
+  else if (channel === 'value') { bins = m.val_bins; nbins = 20; colorFor = () => '#888888'; }
+  else { bins = m.hue_bins; nbins = 36; colorFor = i => { const [rr, gg, bb] = hsvToRgbLocal(i * 10 + 5, 70, 90); return `rgb(${rr},${gg},${bb})`; }; }
+  if (!bins) { ctx.fillStyle = '#999'; ctx.fillText('No histogram data', 10, 20); return; }
+  const maxv = Math.max.apply(null, Array.prototype.slice.call(bins).concat([1]));
+  const bw = (cv.width - 16) / nbins, base = cv.height - 18;
+  ctx.fillStyle = '#333'; ctx.font = '10px sans-serif'; ctx.fillText(channel + ' histogram', 8, 12);
+  for (let i = 0; i < nbins; i++) { const bh = (bins[i] / maxv) * (cv.height - 40); ctx.fillStyle = colorFor(i); ctx.fillRect(8 + i * bw, base - bh, Math.max(1, bw - 1), bh); }
+}
+function downloadVizPNG(id) {
+  const r = recById(id), cv = vizCanvas(id); if (!r || !cv) return;
+  const st = window._vizState[id] || { kind: 'palette' };
+  const label = st.kind === 'cluster' ? 'cluster-region' : st.kind;
+  cv.toBlob(b => downloadBlob(b, stripExt(r.filename) + '_' + label + '.png'), 'image/png');
+}
+
 function stripExt(name) { return name.replace(/\.[^.]+$/, ''); }
+
+// Enable the inline option inputs only when their checkbox is ticked
+function toggleOpt() {
+  const p = document.getElementById('includePixel'), ps = document.getElementById('pixelStep');
+  const s = document.getElementById('includeSpatial'), gs = document.getElementById('gridSize');
+  if (ps) ps.disabled = !(p && p.checked);
+  if (gs) gs.disabled = !(s && s.checked);
+}
+window.addEventListener('DOMContentLoaded', toggleOpt);
 
 // ── CSV builders ────────────────────────────────────────────────────
 function csvEscape(v) {
@@ -1780,8 +1897,8 @@ function downloadClusterCSV() {
   const includeLab = document.getElementById('includeLab').checked;
   const includeSpatial = document.getElementById('includeSpatial').checked;
   const header = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels',
-    'cluster', 'hex', 'red', 'green', 'blue', 'hue', 'saturation', 'value'];
-  if (includeLab) header.push('lab_l', 'lab_a', 'lab_b', 'lch_c', 'lch_h');
+    'cluster', 'hex', 'RGB_R', 'RGB_G', 'RGB_B', 'HSV_H', 'HSV_S', 'HSV_V'];
+  if (includeLab) header.push('LAB_L', 'LAB_A', 'LAB_B', 'LCH_L', 'LCH_C', 'LCH_H');
   header.push('percentage', 'pixel_count');
   if (includeSpatial) header.push('centroid_x', 'centroid_y', 'centroid_x_rel', 'centroid_y_rel', 'spatial_spread_rel');
 
@@ -1790,7 +1907,7 @@ function downloadClusterCSV() {
     for (const c of r.clusters) {
       const row = [r.id, r.filename, r.source, r.width, r.height, r.metrics.analyzed_pixels,
         c.cluster, c.hex, c.red, c.green, c.blue, c.hue, c.saturation, c.value];
-      if (includeLab) row.push(c.lab_l, c.lab_a, c.lab_b, c.lch_c, c.lch_h);
+      if (includeLab) row.push(c.lab_l, c.lab_a, c.lab_b, c.lab_l, c.lch_c, c.lch_h);
       row.push(c.percentage, c.pixel_count);
       if (includeSpatial) row.push(c.centroid_x ?? '', c.centroid_y ?? '', c.centroid_x_rel ?? '', c.centroid_y_rel ?? '', c.spatial_spread_rel ?? '');
       rows.push(row);
@@ -1802,33 +1919,38 @@ function downloadClusterCSV() {
 function downloadImageCSV() {
   const includeLab = document.getElementById('includeLab').checked;
   const includeSpatial = document.getElementById('includeSpatial').checked;
-  const labHead = includeLab
-    ? ['mean_lightness', 'median_lightness', 'mean_chroma', 'median_chroma', 'chroma_std', 'chroma_iqr'] : [];
-  const header = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels', 'opaque_pct',
-    'exif_datetime', 'gps_lat', 'gps_lon', 'gps_alt', 'camera_make', 'camera_model', 'orientation',
-    'mean_r', 'mean_g', 'mean_b', 'mean_hue',
-    'mean_saturation', 'median_saturation', 'saturation_std', 'saturation_iqr',
-    'mean_value', 'median_value',
-    ...labHead,
-    'colourfulness', 'redness', 'cct', 'rms_contrast', 'dark_channel',
-    'warm_pct', 'cool_pct', 'neutral_pct', 'hue_entropy', 'hue_circular_variance',
-    ...(includeSpatial ? ['morans_i'] : [])];
+  const g = v => v == null ? '' : v;
+  // [header, value] pairs keep names and values aligned; SPACE_CHANNEL_STAT scheme
+  const base = m => [
+    ['RGB_R_mean', m.mean_r], ['RGB_R_median', m.median_r], ['RGB_G_mean', m.mean_g], ['RGB_G_median', m.median_g], ['RGB_B_mean', m.mean_b], ['RGB_B_median', m.median_b],
+    ['HSV_H_mean', m.mean_hue], ['HSV_H_median', m.median_hue], ['HSV_H_circvar', m.hue_circular_variance],
+    ['HSV_S_mean', m.mean_saturation], ['HSV_S_median', m.median_saturation], ['HSV_S_std', m.saturation_std], ['HSV_S_iqr', m.saturation_iqr],
+    ['HSV_V_mean', m.mean_value], ['HSV_V_median', m.median_value],
+  ];
+  const lab = m => [
+    ['LAB_L_mean', m.mean_lightness], ['LAB_L_median', m.median_lightness],
+    ['LAB_A_mean', m.mean_lab_a], ['LAB_A_median', m.median_lab_a], ['LAB_B_mean', m.mean_lab_b], ['LAB_B_median', m.median_lab_b],
+    ['LCH_L_mean', m.mean_lightness], ['LCH_L_median', m.median_lightness],
+    ['LCH_C_mean', m.mean_chroma], ['LCH_C_median', m.median_chroma], ['LCH_C_std', m.chroma_std], ['LCH_C_iqr', m.chroma_iqr],
+    ['LCH_H_mean', m.mean_lch_h], ['LCH_H_median', m.median_lch_h],
+  ];
+  const desc = m => [
+    ['colourfulness', m.colourfulness], ['redness', m.redness], ['cct', m.cct], ['rms_contrast', m.rms_contrast], ['dark_channel', m.dark_channel],
+    ['warm_pct', m.warm_pct], ['cool_pct', m.cool_pct], ['neutral_pct', m.neutral_pct], ['hue_entropy', m.hue_entropy],
+  ];
+  const idCols = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels', 'opaque_pct',
+    'exif_datetime', 'gps_lat', 'gps_lon', 'gps_alt', 'camera_make', 'camera_model', 'orientation'];
+  const sample = window._results[0].metrics;
+  const colourCols = [...base(sample), ...(includeLab ? lab(sample) : []), ...desc(sample), ...(includeSpatial ? [['morans_i', sample.morans_i]] : [])];
+  const header = [...idCols, ...colourCols.map(p => p[0])];
   const rows = window._results.map(r => {
     const m = r.metrics;
-    const labVals = includeLab
-      ? [m.mean_lightness ?? '', m.median_lightness ?? '', m.mean_chroma ?? '', m.median_chroma ?? '', m.chroma_std ?? '', m.chroma_iqr ?? '']
-      : [];
+    const cols = [...base(m), ...(includeLab ? lab(m) : []), ...desc(m), ...(includeSpatial ? [['morans_i', m.morans_i]] : [])];
     return [
       r.id, r.filename, r.source, r.width, r.height, m.analyzed_pixels, m.opaque_pct,
       r.exif.datetime ?? '', r.exif.gps_lat ?? '', r.exif.gps_lon ?? '', r.exif.gps_alt ?? '',
       r.exif.make ?? '', r.exif.model ?? '', r.exif.orientation ?? '',
-      m.mean_r, m.mean_g, m.mean_b, m.mean_hue ?? '',
-      m.mean_saturation, m.median_saturation ?? '', m.saturation_std ?? '', m.saturation_iqr ?? '',
-      m.mean_value, m.median_value ?? '',
-      ...labVals,
-      m.colourfulness, m.redness ?? '', m.cct ?? '', m.rms_contrast ?? '', m.dark_channel ?? '',
-      m.warm_pct, m.cool_pct, m.neutral_pct, m.hue_entropy ?? '', m.hue_circular_variance ?? '',
-      ...(includeSpatial ? [m.morans_i ?? ''] : []),
+      ...cols.map(p => g(p[1])),
     ];
   });
   downloadCSVText(buildCSV(header, rows), `colour_image-summary_${todayStamp()}.csv`);
@@ -1850,16 +1972,16 @@ function downloadHistogramCSV() {
 
 function downloadPixelCSV() {
   const includeLab = document.getElementById('includeLab').checked;
-  const header = ['image_id', 'filename', 'x', 'y', 'pixel_hex', 'pixel_r', 'pixel_g', 'pixel_b',
-    'pixel_hue', 'pixel_saturation', 'pixel_value',
-    ...(includeLab ? ['pixel_lab_l', 'pixel_lab_a', 'pixel_lab_b', 'pixel_lch_c', 'pixel_lch_h'] : []),
+  const header = ['image_id', 'filename', 'x', 'y', 'hex', 'RGB_R', 'RGB_G', 'RGB_B',
+    'HSV_H', 'HSV_S', 'HSV_V',
+    ...(includeLab ? ['LAB_L', 'LAB_A', 'LAB_B', 'LCH_L', 'LCH_C', 'LCH_H'] : []),
     'cluster_id', 'cluster_hex'];
   const parts = [header.join(',') + '\n'];
   let count = 0;
   for (const r of window._results) {
     if (!r.pixelRows) continue;
     const chunk = r.pixelRows.map(p => {
-      const lab = includeLab ? [p.lab_l ?? '', p.lab_a ?? '', p.lab_b ?? '', p.lch_c ?? '', p.lch_h ?? ''] : [];
+      const lab = includeLab ? [p.lab_l ?? '', p.lab_a ?? '', p.lab_b ?? '', p.lab_l ?? '', p.lch_c ?? '', p.lch_h ?? ''] : [];
       return [r.id, csvEscape(r.filename), p.x, p.y, p.hex, p.r, p.g, p.b, p.h, p.s, p.v,
        ...lab, p.cluster_id ?? '', p.cluster_hex ?? ''].join(',');
     }).join('\n');
@@ -1876,7 +1998,7 @@ function downloadPixelCSV() {
 
 function downloadProfilesCSV() {
   const header = ['image_id', 'filename', 'axis', 'index', 'n',
-    'mean_r', 'mean_g', 'mean_b', 'hue', 'saturation', 'value', 'lightness', 'chroma'];
+    'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'HSV_H_mean', 'HSV_S_mean', 'HSV_V_mean', 'LAB_L_mean', 'LCH_C_mean'];
   const rows = [];
   for (const r of window._results) {
     if (!r.spatial) continue;
@@ -1889,7 +2011,7 @@ function downloadProfilesCSV() {
 
 function downloadGridCSV() {
   const header = ['image_id', 'filename', 'grid_n', 'cell_x', 'cell_y', 'n',
-    'mean_r', 'mean_g', 'mean_b', 'hue', 'saturation', 'value', 'lightness'];
+    'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'HSV_H_mean', 'HSV_S_mean', 'HSV_V_mean', 'LAB_L_mean'];
   const rows = [];
   for (const r of window._results) {
     if (!r.spatial) continue;
