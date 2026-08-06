@@ -1,6 +1,6 @@
 # Batch Image Analyzer — Vis-O-Matic
 
-A browser-based tool for measuring colour in images, singly or in batches. Drop in a folder of imagess; choose how you want colour analyzed; review the distributions and export them as CSV, per-image summaries, or aggregate tables. Nothing is uploaded — analysis runs locally in your browser.
+A browser-based tool for measuring colour across a whole set of images at once. It clusters each image into its dominant colours, reports colour values in HSV, CIELAB and LCH, computes a suite of whole-image and spatial metrics, reads EXIF (including GPS), and exports everything as CSV. Nothing is uploaded — analysis runs locally in your browser.
 
 **[Live demo →](https://www.jonathancinnamon.com/image-colour-analyzer/)**
 
@@ -10,59 +10,73 @@ Part of [Vis-O-Matic](https://www.jonathancinnamon.com/vis-o-matic/), alongside 
 
 ## Features
 
-- **In-browser colour analysis** — runs entirely client-side in your browser; images never leave your computer, and no account or server is involved.
-- **Batch processing** — drag in a folder of images and measure them in one pass; handles hundreds of files with consistent settings.
-- **Flexible colour models** — summarize colour in RGB, HSL, HSV, or LAB space, with options for dominant colour, mean colour, and distributions.
-- **Mask and transparency handling** — respect alpha channels and binary masks from Image Cutter, so measurements focus on the segmented region rather than the full frame.
-- **Spatial summaries** — divide each image into grids or bands (e.g. sky vs ground) and compute colour for each zone, useful for skyline and smoke analysis.
-- **CSV output** — export per-image measurements (mean, median, variance, distribution bins), image metadata, and any spatial splits into a single `measurements.csv`.
-- **Project-level aggregates** — compute summary statistics across the whole batch (e.g. average sky hue, distribution of haze intensity) for quick comparison between folders.
-- **EXIF / GPS integration** — read EXIF and PNG `eXIf` chunks from source images and pass GPS/location fields into the CSV, so colour measurements can be joined to place and time.
+- **Batch colour analysis** — drop in a folder or a list of URLs; each image is downsampled to an analysis resolution you set, then measured locally.
+- **K-means clustering** — k-means++ initialisation with a fixed seed for reproducibility; 2–20 dominant colours per image, each reported in HSV, CIELAB and LCH with its pixel share.
+- **Three levels of granularity** — cluster-level, image-level, and optional pixel-level tables, plus a hue histogram.
+- **EXIF passthrough** — GPS, capture date, camera and orientation read from JPEGs and from PNGs carrying an eXIf chunk, including cut-outs exported by [Image Cutter](https://www.jonathancinnamon.com/image-cutter/) with GPS/EXIF preserved.
+- **Transparency handling** — composite transparent areas onto white, black or grey, or analyse opaque pixels only.
+- **CSV exports** for every table; **PNG/JPG** montages of palettes and quantized images.
 
 ---
 
-## EXIF / GPS integration
+## Metrics
 
-Colour analysis often depends on where and when an image was taken. When the source photos carry EXIF metadata (including PNG `eXIf` chunks written by Image Cutter), Batch Image Analyzer reads and includes those fields in the CSV:
+**Colour central tendency and spread (image level).** Mean and median hue, saturation, value, CIELAB lightness (L\*) and chroma (C\*ab), with standard deviation and IQR for saturation and chroma, and circular variance for hue. Medians resist outliers such as the sun or residual obstructions, so a mean/median divergence flags contamination.
 
-- **From each image** — GPS latitude/longitude/altitude, capture datetime, camera make/model, and orientation are extracted where available.
-- **Into the measurements CSV** — columns such as `gps_lat`, `gps_lon`, `gps_alt`, `datetime`, `camera_make`, `camera_model`, and `orientation` are added alongside colour fields.
+**Scene descriptors.** Colourfulness (Hasler–Süsstrunk), a redness index (R−B)/(R+B), correlated colour temperature (CCT, via McCamy), RMS contrast, a dark-channel haze estimate, warm/cool/neutral pixel proportions, hue entropy, and hue circular variance.
 
-JPEGs, EXIF-bearing PNGs, and other supported formats bring their metadata through automatically; images without EXIF simply leave those columns blank. This lets colour, smoke, and sky measurements be linked to capture context without manual joins, especially in workflows starting from Image Cutter.
+**Colour spaces.** HSV separates hue, saturation and brightness; CIELAB/LCH are perceptually oriented, so numerical distances track perceived colour difference more faithfully. LAB/LCH values appear in the cluster, pixel and image tables when the **LAB/LCH** option is ticked (on by default); untick it to omit all LAB/LCH columns from every CSV.
+
+---
+
+## Spatial structure (optional)
+
+Tick **Spatial structure** to add, using the pixel positions the tool already has:
+
+- **Row and column profiles** — mean colour and metrics per image row and per column (CSV). Captures gradients in any orientation.
+- **Grid / tile table** — an N×N grid (size configurable) with per-cell colour and metrics (CSV), for spatial heat-maps and region comparison.
+- **Cluster spatial signature** — centroid (absolute and relative) and spatial spread of each dominant colour, added to the cluster table.
+- **Moran's I** — spatial autocorrelation of cell lightness (rook contiguity) in the image summary: one index of how spatially organised the colour is, from clustered (positive) to salt-and-pepper (negative).
+
+Because GPS and capture date are exported with each image, sun position and other solar-geometry analyses can be computed downstream without re-running the tool.
+
+---
+
+## Image export
+
+- **Palette montage** — one proportional dominant-colour strip per image, labelled, as PNG or JPG.
+- **Quantized montage** — each image recoloured to its k dominant clusters, as PNG or JPG.
 
 ---
 
 ## Usage
 
 1. Open the tool in a browser — no installation, no account, no server.
-2. Drop in an image or a folder (or choose files) and select colour model and summary options.
-3. Configure analysis: choose whether to honour transparency/masks, set grid or band splits (e.g. sky vs ground), and pick per-image vs aggregate outputs.
-4. Run the analysis to compute colour summaries for each image; review sample results in the interface to confirm the settings behave as expected.
-5. Export the results as a `measurements.csv` (and optional per-image tables or project summary CSVs), with EXIF/GPS fields included where available.
-6. Use the CSV directly in statistical software, or pass it on to [Image Visualizer](https://www.jonathancinnamon.com/image-colour-visualizer/) for mapping and visual exploration.
+2. Add local images (or a folder), or paste image URLs.
+3. Set analysis precision, cluster count, and transparency handling; tick the tables and options you want (LAB/LCH, EXIF, hue histogram, pixel-level, spatial structure) and set the grid and pixel-subsample sizes.
+4. Click **Analyse Images**.
+5. Use the download buttons above the results for the CSV tables and the palette / quantized PNG or JPG.
 
-A typical research sequence runs Image Cutter → Batch Image Analyzer → Image Visualizer, handing folders of cut-outs and CSVs from one tool to the next. Each tool also works on its own.
+A typical research sequence runs Image Cutter → Batch Image Analyzer → Image Visualizer, handing folders of cut-outs and CSVs from one tool to the next; each tool also works on its own.
 
 ---
 
 ## Notes & limitations
 
-- The analyser summarizes the colours it sees; it does not judge image quality or "correct" exposure. Treat each measurement as an instrument reading and report the settings used.
-- Internally, images may be resized or sampled to keep memory and computation manageable; this preserves overall distributions but may not capture single-pixel features.
-- Above roughly a few hundred images the browser may feel sluggish, since everything runs client-side; consider splitting very large collections into batches.
-- If masks or transparency are ignored, measurements refer to the whole frame; be explicit in methods sections about whether region-of-interest segmentation was used.
+- Images are downsampled to the chosen analysis resolution before measurement, which sets the resolution of the pixel-level and spatial outputs.
+- Clustering is k-means with a fixed seed, so results are reproducible; treat cluster boundaries as an instrument reading, not ground truth.
+- The dark-channel metric is a lightweight per-pixel version of the dark-channel prior and is most meaningful on full-frame scenes rather than tightly cropped subjects.
+- Metrics describe apparent colour as recorded, not radiometrically calibrated values.
 
 ---
 
 ## Privacy
 
-No image ever leaves your computer. There is no server, no account, and no upload step. The tool works offline once loaded; web access is needed only to fetch the code initially, which is then cached locally.
+No image ever leaves your computer. There is no server, no account and no upload step. The tool works offline.
 
 ---
 
 ## Citation
-
-If this is useful in research or teaching, please cite the tool:
 
 > Cinnamon, J. (2026). *Batch Image Analyzer* [Computer software]. Vis-O-Matic. https://www.jonathancinnamon.com/image-colour-analyzer/
 
@@ -70,7 +84,7 @@ If this is useful in research or teaching, please cite the tool:
 
 ## License
 
-MIT. Libraries used for image handling, colour conversion, and EXIF parsing carry their own licences, noted in the tool. Free to use and adapt with attribution.
+MIT. Free to use and adapt with attribution.
 
 ---
 
