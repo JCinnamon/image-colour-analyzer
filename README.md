@@ -15,13 +15,15 @@ Part of [Vis-O-Matic](https://www.jonathancinnamon.com/vis-o-matic/), alongside 
 - **Three levels of granularity** — cluster-level, image-level, and optional pixel-level tables, plus a hue histogram.
 - **EXIF passthrough** — GPS, capture date, camera and orientation read from JPEGs and from PNGs carrying an eXIf chunk, including cut-outs exported by [Image Cutter](https://www.jonathancinnamon.com/image-cutter/) with GPS/EXIF preserved.
 - **Transparency handling** — composite transparent areas onto white, black or grey, or analyse opaque pixels only.
-- **CSV exports** for every table; **PNG/JPG** montages of palettes and quantized images.
+- **CSV exports** for every table, with consistent `SPACE_CHANNEL_STAT` column names; **per-image PNG** visualizations chosen from a dropdown on each result.
 
 ---
 
 ## Metrics
 
-**Colour central tendency and spread (image level).** Mean and median hue, saturation, value, CIELAB lightness (L\*) and chroma (C\*ab), with standard deviation and IQR for saturation and chroma, and circular variance for hue. Medians resist outliers such as the sun or residual obstructions, so a mean/median divergence flags contamination.
+**Colour central tendency and spread (image level).** Every channel is reported as both a mean and a median — RGB (R/G/B), HSV (H/S/V), CIELAB (L\*/a\*/b\*) and LCH (L/C/H) — with standard deviation and IQR for saturation and chroma, and circular variance for hue. Hue means and medians are computed circularly. Medians resist outliers such as the sun or residual obstructions, so a mean/median divergence flags contamination.
+
+**Column naming.** All CSVs use a consistent `SPACE_CHANNEL_STAT` scheme. The image summary uses names like `HSV_V_mean`, `HSV_H_median`, `LAB_L_mean`, `LCH_C_median`; the per-colour tables (cluster, pixel), which hold a single colour, use `HSV_H`, `HSV_S`, `HSV_V`, `LAB_L`, `LAB_A`, `LAB_B`, `LCH_L`, `LCH_C`, `LCH_H`. Identity columns (filename, gps_lat, …) and scalar descriptors (colourfulness, redness, cct, …) keep their plain names.
 
 **Scene descriptors.** Colourfulness (Hasler–Süsstrunk), a redness index (R−B)/(R+B), correlated colour temperature (CCT, via McCamy), RMS contrast, a dark-channel haze estimate, warm/cool/neutral pixel proportions, hue entropy, and hue circular variance.
 
@@ -42,10 +44,15 @@ Because GPS and capture date are exported with each image, sun position and othe
 
 ---
 
-## Image export
+## Per-image visualizations
 
-- **Palette montage** — one proportional dominant-colour strip per image, labelled, as PNG or JPG.
-- **Quantized montage** — each image recoloured to its k dominant clusters, as PNG or JPG.
+Each result carries a **Visualizations** dropdown that opens one view below the card and downloads it as **PNG**:
+
+- **Palette** — the image's dominant-colour strip, sized by pixel share.
+- **Cluster-region image** — the image recoloured to its k dominant clusters.
+- **Grid image** — the N×N spatial grid rendered as mean-colour cells (with Spatial structure on).
+- **Row/column profile** — the mean-colour gradient along each axis (with Spatial structure on).
+- **H/S/V histogram** — hue, saturation or value distribution, chosen with the channel toggle.
 
 ---
 
@@ -55,7 +62,7 @@ Because GPS and capture date are exported with each image, sun position and othe
 2. Add local images (or a folder), or paste image URLs.
 3. Set analysis precision, cluster count, and transparency handling; tick the tables and options you want (LAB/LCH, EXIF, hue histogram, pixel-level, spatial structure) and set the grid and pixel-subsample sizes.
 4. Click **Analyse Images**.
-5. Use the download buttons above the results for the CSV tables and the palette / quantized PNG or JPG.
+5. Use the download buttons above the results for the CSV tables; open the **Visualizations** dropdown on each result to view and download per-image PNGs.
 
 A typical research sequence runs Image Cutter → Batch Image Analyzer → Image Visualizer, handing folders of cut-outs and CSVs from one tool to the next; each tool also works on its own.
 
