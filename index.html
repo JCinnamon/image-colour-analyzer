@@ -83,7 +83,12 @@
     .page-header p  { font-size: 0.78rem; opacity: 0.72; margin-top: 2px; }
 
     /* ── Layout ──────────────────────────────────────────────── */
-    .page-body { max-width: 960px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    .page-body { max-width: 1180px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    .cfg-sec > summary { list-style: none; }
+    .cfg-row { display: flex; gap: .9rem; align-items: center; flex-wrap: nowrap; overflow-x: auto; }
+    .cfg-row label { white-space: nowrap; }
+    .btn.preset-active { background: var(--primary-dark, #1a2332); color: #fff; border-color: var(--primary-dark, #1a2332); }
+    .allbox { font-weight: 600; }
 
     /* ── Card ────────────────────────────────────────────────── */
     .card {
@@ -471,12 +476,14 @@
     <div class="info-box">
       <summary>How it works</summary>
       <ul>
-        <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF metadata (GPS, date, camera) is read from JPEGs and from PNGs that carry an eXIf chunk, including cut-outs exported by Image Cutter with GPS/EXIF preserved.</li>
-        <li><strong>Image URLs</strong> — direct links to .jpg, .jpeg, .png, .webp, .gif, or .bmp files. The image host must permit cross-origin access (CORS); images that block it will fail with a clear message.</li>
-        <li><strong>PNG transparency is respected</strong> — choose whether transparent areas are composited onto white, black, or grey, or excluded entirely so only opaque pixels are analyzed.</li>
-        <li><strong>Image-level metrics</strong> — mean and median hue, saturation, value, CIELAB L* and C*ab, with spread (std and IQR) and hue circular variance; plus colourfulness, redness index, correlated colour temperature (CCT), RMS contrast, dark-channel haze, warm/cool/neutral proportions, and hue entropy.</li>
-        <li><strong>Spatial structure (optional)</strong> — row and column colour profiles, an N×N grid/tile table, per-cluster centroid and spatial spread, and Moran's I spatial autocorrelation of lightness.</li>
-        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, hue-histogram, and spatial (profiles, grid) tables, each downloadable as CSV with consistent SPACE_CHANNEL_STAT column names (e.g. HSV_V_mean, LAB_L_median, LCH_C_mean). Per-image visualizations (palette, cluster-region, grid, row/column profile, and H/S/V histogram) open from a dropdown on each result and download as PNG.</li>
+        <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF (GPS, date, camera) is read from JPEGs and from PNGs carrying an eXIf chunk, including cut-outs exported by Image Cutter with GPS/EXIF preserved. Image URLs also work if the host allows cross-origin (CORS) access.</li>
+        <li><strong>Core settings</strong> — Analysis Precision sets the working resolution; Colour Clusters sets the k-means palette size (k-means++, fixed seed); Transparency Handling defaults to <em>Opaque pixels only</em> (composite onto white/black/grey are alternatives).</li>
+        <li><strong>Columns (collapsible)</strong> — choose which <strong>colour spaces</strong> (RGB, HSV, LAB, LCH), <strong>statistics</strong> (mean, median, std dev, range, IQR), and <strong>scene metrics</strong> to export, or use the Core / Full / Minimal presets. Each row has an "all" toggle. Hue is treated circularly (mean, median, circular variance). Scene metrics: colourfulness, redness index, CCT, RMS contrast, dark-channel haze, warm/cool/neutral, hue entropy. Column names follow a consistent SPACE_CHANNEL_STAT scheme (e.g. HSV_V_mean, LAB_L_median, LCH_C_range).</li>
+        <li><strong>Histogram table (collapsible)</strong> — export per-image histograms for any of hue, saturation, and value, in long format with a channel column.</li>
+        <li><strong>Spatial structure (collapsible)</strong> — an X × Y grid (with an optional lock to each image's ratio for square cells) yields row/column colour profiles, a grid/tile table, per-cluster centroid and spatial spread, and <strong>Moran's I spatial autocorrelation</strong> computed per cell on any chosen channels or metrics (L*, C*ab, saturation, value, a*, b*, R, G, B, redness, CCT, colourfulness, RMS contrast, dark-channel).</li>
+        <li><strong>Visualization (collapsible)</strong> — enable per-image views and pick which to offer: Original image, Palette, Cluster-region image, Grid, Grid heatmap (coloured by a chosen channel/statistic with a legend), Row/column profile, and H/S/V histogram. Each opens from a dropdown on the result and downloads as a crisp PNG tagged at <strong>300 dpi</strong>.</li>
+        <li><strong>Dataset visualizations</strong> — across the whole set: a summed hue/saturation/value histogram, an aggregate palette (all dominant colours combined, sorted by hue), and a metric-distribution view (histogram of any image-level metric or Moran's I value, with mean and median marked). Downloads as 300 dpi PNG.</li>
+        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, histogram, and spatial (profiles, grid) tables, each downloadable as CSV. Everything runs locally; nothing is uploaded.</li>
       </ul>
     </div>
   </details>
@@ -550,28 +557,118 @@
       </div>
 
       <div class="field full-width">
-        <div class="checkbox-row">
-          <label><input type="checkbox" id="includeLab" checked> LAB / LCH colour values</label>
-          <label><input type="checkbox" id="includeExif" checked> Extract EXIF (GPS, date, camera)</label>
-          <label><input type="checkbox" id="includeHistogram"> Hue histogram table</label>
-        </div>
-        <div class="opt-line" style="display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap">
-          <label style="display:inline-flex;align-items:center;gap:5px;min-width:230px;margin:0"><input type="checkbox" id="includePixel" onchange="toggleOpt()"> Pixel-level table (large!)</label>
-          <input type="number" id="pixelStep" value="1" min="1" max="200" step="1" disabled style="width:64px">
-          <span class="hint" style="margin:0">keep every Nth analyzed pixel (caps file size)</span>
-        </div>
-        <div class="opt-line" style="display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap">
-          <label style="display:inline-flex;align-items:center;gap:5px;min-width:230px;margin:0"><input type="checkbox" id="includeSpatial" onchange="toggleOpt()"> Spatial structure</label>
-          <input type="number" id="gridSize" value="8" min="2" max="64" step="1" disabled title="grid size N×N" style="width:64px">
-          <select id="spatialChannel" disabled style="max-width:160px">
-            <option value="L">Lightness L*</option>
-            <option value="C">Chroma C*ab</option>
-            <option value="S">Saturation</option>
-            <option value="a">a* (red–green)</option>
-            <option value="b">b* (yellow–blue)</option>
-          </select>
-          <span class="hint" style="margin:0">N×N grid; channel drives Moran's I &amp; the grid heatmap (profiles, grid, Moran's I)</span>
-        </div>
+        <details class="cfg-sec" open style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
+          <summary style="cursor:pointer;font-weight:600">Columns — colour spaces, statistics &amp; scene metrics</summary>
+          <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.5rem">
+            <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Presets:</span>
+              <button type="button" class="btn btn-outline btn-sm" onclick="applyPreset('core', this)">Core</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="applyPreset('full', this)">Full</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="applyPreset('minimal', this)">Minimal</button>
+            </div>
+            <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Colour spaces:</span>
+              <label class="allbox"><input type="checkbox" id="allColSpace" onchange="toggleAll('colSpace', this)" checked> all</label>
+              <label><input type="checkbox" class="colSpace" value="RGB" checked> RGB</label>
+              <label><input type="checkbox" class="colSpace" value="HSV" checked> HSV</label>
+              <label><input type="checkbox" class="colSpace" value="LAB" checked> LAB</label>
+              <label><input type="checkbox" class="colSpace" value="LCH" checked> LCH</label>
+            </div>
+            <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Statistics:</span>
+              <label class="allbox"><input type="checkbox" id="allColStat" onchange="toggleAll('colStat', this)"> all</label>
+              <label><input type="checkbox" class="colStat" value="mean" checked> mean</label>
+              <label><input type="checkbox" class="colStat" value="median" checked> median</label>
+              <label><input type="checkbox" class="colStat" value="std"> std dev</label>
+              <label><input type="checkbox" class="colStat" value="range"> range</label>
+              <label><input type="checkbox" class="colStat" value="iqr"> IQR</label>
+            </div>
+            <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Scene metrics:</span>
+              <label class="allbox"><input type="checkbox" id="allColMetric" onchange="toggleAll('colMetric', this)"> all</label>
+              <label><input type="checkbox" class="colMetric" value="colourfulness" checked> colourfulness</label>
+              <label><input type="checkbox" class="colMetric" value="redness" checked> redness</label>
+              <label><input type="checkbox" class="colMetric" value="cct" checked> CCT</label>
+              <label><input type="checkbox" class="colMetric" value="rms_contrast"> RMS contrast</label>
+              <label><input type="checkbox" class="colMetric" value="dark_channel"> dark-channel</label>
+              <label><input type="checkbox" class="colMetric" value="warm_pct" checked> warm/cool/neutral</label>
+              <label><input type="checkbox" class="colMetric" value="hue_entropy" checked> hue entropy</label>
+              <label><input type="checkbox" class="colMetric" value="hue_circular_variance"> hue circular variance</label>
+            </div>
+            <div class="cfg-row" style="border-top:1px solid var(--border);padding-top:.45rem">
+              <label><input type="checkbox" id="includeExif" checked> Extract EXIF (GPS, date, camera)</label>
+              <span class="hint" style="margin:0">LAB/LCH raw values in the cluster &amp; pixel tables follow the LAB/LCH space toggles above.</span>
+            </div>
+          </div>
+        </details>
+
+        <details class="cfg-sec" style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
+          <summary style="cursor:pointer;font-weight:600">Histogram table</summary>
+          <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem">
+            <label style="margin:0"><input type="checkbox" id="includeHistogram"> Export per-image histogram table (CSV)</label>
+            <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Channels:</span>
+              <label class="allbox"><input type="checkbox" id="allHistCh" onchange="toggleAll('histCh', this)" checked> all</label>
+              <label><input type="checkbox" class="histCh" value="hue" checked> hue</label>
+              <label><input type="checkbox" class="histCh" value="sat" checked> saturation</label>
+              <label><input type="checkbox" class="histCh" value="val" checked> value</label>
+            </div>
+          </div>
+        </details>
+
+        <details class="cfg-sec" style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
+          <summary style="cursor:pointer;font-weight:600">Pixel-level table</summary>
+          <div style="margin-top:.55rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="min-width:230px;margin:0"><input type="checkbox" id="includePixel" onchange="toggleOpt()"> Pixel-level table (large!)</label>
+            <input type="number" id="pixelStep" value="1" min="1" max="200" step="1" disabled style="width:64px">
+            <span class="hint" style="margin:0">keep every Nth analyzed pixel (caps file size)</span>
+          </div>
+        </details>
+
+        <details class="cfg-sec" style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
+          <summary style="cursor:pointer;font-weight:600">Spatial structure</summary>
+          <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <label style="display:inline-flex;align-items:center;gap:5px;min-width:180px;margin:0"><input type="checkbox" id="includeSpatial" onchange="toggleOpt()"> Enable spatial structure</label>
+              <span class="hint" style="margin:0">grid</span>
+              <input type="number" id="gridX" value="8" min="1" max="128" step="1" disabled title="grid columns (X)" style="width:56px">
+              <span class="hint" style="margin:0">×</span>
+              <input type="number" id="gridY" value="8" min="1" max="128" step="1" disabled title="grid rows (Y)" style="width:56px">
+              <span id="gridYnote" class="hint" style="margin:0;display:none">locked to each image ratio</span>
+              <label style="display:inline-flex;align-items:center;gap:4px;margin:0"><input type="checkbox" id="lockRatio" onchange="toggleOpt()" disabled> lock to image ratio (square cells)</label>
+            </div>
+            <div id="moranChLine" class="cfg-row" style="gap:10px">
+              <span class="hint" style="margin:0;min-width:96px">Moran's I on:</span>
+              <label class="allbox" style="margin:0"><input type="checkbox" id="allMoranCh" onchange="toggleAll('moranCh', this)" disabled> all</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="L" checked disabled> L*</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="C" disabled> C*ab</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="S" disabled> saturation</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="V" disabled> value</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="a" disabled> a*</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="b" disabled> b*</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="R" disabled> R</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="G" disabled> G</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="B" disabled> B</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="red" disabled> redness</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="cct" disabled> CCT</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="colf" disabled> colourfulness</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="rms" disabled> RMS contrast</label>
+              <label style="margin:0"><input type="checkbox" class="moranCh" value="dark" disabled> dark-channel</label>
+            </div>
+          </div>
+        </details>
+
+        <details class="cfg-sec" open style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem">
+          <summary style="cursor:pointer;font-weight:600">Visualization</summary>
+          <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem">
+            <label><input type="checkbox" id="includeViz" checked> Enable per-image visualizations</label>
+            <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Views:</span>
+              <label class="allbox"><input type="checkbox" id="allVizType" onchange="toggleAll('vizType', this)" checked> all</label>
+              <label><input type="checkbox" class="vizType" value="original" checked> Original</label>
+              <label><input type="checkbox" class="vizType" value="palette" checked> Palette</label>
+              <label><input type="checkbox" class="vizType" value="cluster" checked> Cluster-region</label>
+              <label><input type="checkbox" class="vizType" value="grid" checked> Grid</label>
+              <label><input type="checkbox" class="vizType" value="gridheat" checked> Grid heatmap</label>
+              <label><input type="checkbox" class="vizType" value="profiles" checked> Row/col profile</label>
+              <label><input type="checkbox" class="vizType" value="hist" checked> Histogram</label>
+            </div>
+          </div>
+        </details>
       </div>
 
     </div>
@@ -770,7 +867,7 @@ function stats1d(arr) {
   const median = q(0.5), iqr = q(0.75) - q(0.25);
   let m = 0; for (let i = 0; i < n; i++) m += a[i]; m /= n;
   let v = 0; for (let i = 0; i < n; i++) { const d = a[i] - m; v += d * d; } v /= n;
-  return { median, iqr, std: Math.sqrt(v) };
+  return { median, iqr, std: Math.sqrt(v), range: a[n - 1] - a[0], min: a[0], max: a[n - 1] };
 }
 
 // Circular median of angles (degrees): shift about the circular mean, take the linear median, wrap back
@@ -884,6 +981,22 @@ function imageMetrics(pixels) {
   const r2 = x => x == null ? null : Math.round(x * 100) / 100;
   const r3 = x => x == null ? null : Math.round(x * 1000) / 1000;
 
+  // Structured per-channel statistics (mean/median/std/range/iqr; hue is circular)
+  const chStats = {
+    RGB_R: { mean: Math.round(sumR / n), median: Math.round(sR.median), std: r2(sR.std), range: Math.round(sR.range), iqr: Math.round(sR.iqr) },
+    RGB_G: { mean: Math.round(sumG / n), median: Math.round(sG.median), std: r2(sG.std), range: Math.round(sG.range), iqr: Math.round(sG.iqr) },
+    RGB_B: { mean: Math.round(sumB / n), median: Math.round(sB.median), std: r2(sB.std), range: Math.round(sB.range), iqr: Math.round(sB.iqr) },
+    HSV_H: { mean: meanHue, median: r1(medHue), circvar: hueCircVar },
+    HSV_S: { mean: r1(sumS / n), median: r1(sS.median), std: r1(sS.std), range: r1(sS.range), iqr: r1(sS.iqr) },
+    HSV_V: { mean: r1(sumV / n), median: r1(sV.median), std: r1(sV.std), range: r1(sV.range), iqr: r1(sV.iqr) },
+    LAB_L: { mean: r2(sumL / n), median: r2(sL.median), std: r2(sL.std), range: r2(sL.range), iqr: r2(sL.iqr) },
+    LAB_A: { mean: r2(sumA / n), median: r2(sA.median), std: r2(sA.std), range: r2(sA.range), iqr: r2(sA.iqr) },
+    LAB_B: { mean: r2(sumBlab / n), median: r2(sBl.median), std: r2(sBl.std), range: r2(sBl.range), iqr: r2(sBl.iqr) },
+    LCH_L: { mean: r2(sumL / n), median: r2(sL.median), std: r2(sL.std), range: r2(sL.range), iqr: r2(sL.iqr) },
+    LCH_C: { mean: r2(sumC / n), median: r2(sC.median), std: r2(sC.std), range: r2(sC.range), iqr: r2(sC.iqr) },
+    LCH_H: { mean: r1(meanLchH), median: r1(medLchH) },
+  };
+
   // New scene descriptors
   const meanR = sumR / n, meanG = sumG / n, meanB = sumB / n;
   const redness = (meanR + meanB) > 0 ? r3((meanR - meanB) / (meanR + meanB)) : 0;
@@ -912,6 +1025,7 @@ function imageMetrics(pixels) {
     warm_pct: pct(warm), cool_pct: pct(cool), neutral_pct: pct(neutral),
     hue_entropy: entropy,
     hue_circular_variance: hueCircVar,
+    ch: chStats,
     hue_bins: Array.from(hueBins),
     sat_bins: Array.from(satBins),
     val_bins: Array.from(valBins),
@@ -1047,14 +1161,33 @@ function parseExif(buffer) {
 }
 
 // ── Spatial structure (row/col profiles, grid, cluster centroids, Moran's I) ──
-function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridN, nAnalyzed, spatialChannel) {
-  const chan = spatialChannel || 'L';
+function moransI(field, GX, GY) {
+  const valid = []; for (let ci = 0; ci < GX * GY; ci++) if (!isNaN(field[ci])) valid.push(ci);
+  if (valid.length <= 2) return null;
+  let mean = 0; for (const ci of valid) mean += field[ci]; mean /= valid.length;
+  let num = 0, den = 0, W = 0;
+  for (const ci of valid) { const d = field[ci] - mean; den += d * d; }
+  for (const ci of valid) { const gx = ci % GX, gy = (ci / GX) | 0, di = field[ci] - mean;
+    for (const [nx, ny] of [[gx - 1, gy], [gx + 1, gy], [gx, gy - 1], [gx, gy + 1]]) {
+      if (nx < 0 || ny < 0 || nx >= GX || ny >= GY) continue; const nj = ny * GX + nx;
+      if (isNaN(field[nj])) continue; num += di * (field[nj] - mean); W++; } }
+  return (den > 0 && W > 0) ? Math.round((valid.length / W) * (num / den) * 1000) / 1000 : null;
+}
+function cellChanVal(o, ch) {
+  return ({ R: o.mean_r, G: o.mean_g, B: o.mean_b, S: o.saturation, V: o.value, L: o.lightness, a: o.lab_a, b: o.lab_b, C: o.chroma,
+    red: o.redness, cct: o.cct, colf: o.colf, rms: o.rms, dark: o.dark })[ch];
+}
+function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels) {
+  const GX = Math.max(1, gridX | 0), GY = Math.max(1, gridY | 0);
+  const chans = (channels && channels.length) ? channels : ['L'];
   const px = i => coords ? coords[i * 2] : (i % w);
   const py = i => coords ? coords[i * 2 + 1] : Math.floor(i / w);
   const rowN = new Float64Array(h), rowR = new Float64Array(h), rowG = new Float64Array(h), rowB = new Float64Array(h);
   const colN = new Float64Array(w), colR = new Float64Array(w), colG = new Float64Array(w), colB = new Float64Array(w);
-  const G = Math.max(2, gridN | 0);
-  const cN = new Float64Array(G * G), cR = new Float64Array(G * G), cG = new Float64Array(G * G), cB = new Float64Array(G * G);
+  const NC = GX * GY;
+  const cN = new Float64Array(NC), cR = new Float64Array(NC), cG = new Float64Array(NC), cB = new Float64Array(NC);
+  const cRg = new Float64Array(NC), cYb = new Float64Array(NC), cRg2 = new Float64Array(NC), cYb2 = new Float64Array(NC);
+  const cY = new Float64Array(NC), cY2 = new Float64Array(NC), cDark = new Float64Array(NC);
   const K = clusters.length;
   const kmRank = {}; clusters.forEach((c, idx) => { kmRank[c._kmIndex] = idx; });
   const kX = new Float64Array(K), kY = new Float64Array(K), kX2 = new Float64Array(K), kY2 = new Float64Array(K), kN = new Float64Array(K);
@@ -1064,8 +1197,10 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridN, nAnalyz
     const x = px(i), y = py(i);
     if (y >= 0 && y < h) { rowN[y]++; rowR[y] += r; rowG[y] += g; rowB[y] += b; }
     if (x >= 0 && x < w) { colN[x]++; colR[x] += r; colG[x] += g; colB[x] += b; }
-    const gx = Math.min(G - 1, Math.floor(x / w * G)), gy = Math.min(G - 1, Math.floor(y / h * G));
-    const ci = gy * G + gx; cN[ci]++; cR[ci] += r; cG[ci] += g; cB[ci] += b;
+    const gx = Math.min(GX - 1, Math.floor(x / w * GX)), gy = Math.min(GY - 1, Math.floor(y / h * GY));
+    const ci = gy * GX + gx; cN[ci]++; cR[ci] += r; cG[ci] += g; cB[ci] += b;
+    const rg = r - g, yb = 0.5 * (r + g) - b; cRg[ci] += rg; cYb[ci] += yb; cRg2[ci] += rg * rg; cYb2[ci] += yb * yb;
+    const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b; cY[ci] += Y; cY2[ci] += Y * Y; cDark[ci] += Math.min(r, g, b);
     if (kmLabels) { const rank = kmRank[kmLabels[i]]; if (rank != null) { kX[rank] += x; kY[rank] += y; kX2[rank] += x * x; kY2[rank] += y * y; kN[rank]++; } }
   }
 
@@ -1075,29 +1210,29 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridN, nAnalyz
     const [C] = labToLch(L, A, Bb);
     return { mean_r: Math.round(mr), mean_g: Math.round(mg), mean_b: Math.round(mb), hue: hh, saturation: ss, value: vv, lightness: L, chroma: C, lab_a: A, lab_b: Bb };
   };
-  const chanVal = o => ({ L: o.lightness, C: o.chroma, S: o.saturation, a: o.lab_a, b: o.lab_b }[chan] ?? o.lightness);
   const profile = (N, R, Gc, B) => { const out = [];
     for (let k = 0; k < N.length; k++) { if (!N[k]) continue; const o = derive(R[k] / N[k], Gc[k] / N[k], B[k] / N[k]); o.index = k; o.n = N[k]; out.push(o); } return out; };
   const rows = profile(rowN, rowR, rowG, rowB);
   const cols = profile(colN, colR, colG, colB);
 
-  const grid = []; const field = new Float64Array(G * G).fill(NaN);
-  for (let ci = 0; ci < G * G; ci++) { if (!cN[ci]) continue;
-    const o = derive(cR[ci] / cN[ci], cG[ci] / cN[ci], cB[ci] / cN[ci]);
-    o.cell_x = ci % G; o.cell_y = (ci / G) | 0; o.n = cN[ci]; grid.push(o); field[ci] = chanVal(o); }
+  const grid = []; const cellObj = new Array(NC).fill(null);
+  for (let ci = 0; ci < NC; ci++) { if (!cN[ci]) continue;
+    const nc = cN[ci], mr = cR[ci] / nc, mg = cG[ci] / nc, mb = cB[ci] / nc;
+    const o = derive(mr, mg, mb);
+    o.cell_x = ci % GX; o.cell_y = (ci / GX) | 0; o.n = nc;
+    o.redness = (mr + mb) > 0 ? Math.round(((mr - mb) / (mr + mb)) * 1000) / 1000 : 0;
+    o.cct = rgbToCCT(mr, mg, mb);
+    const mRg = cRg[ci] / nc, mYb = cYb[ci] / nc, vRg = Math.max(0, cRg2[ci] / nc - mRg * mRg), vYb = Math.max(0, cYb2[ci] / nc - mYb * mYb);
+    o.colf = Math.round((Math.sqrt(vRg + vYb) + 0.3 * Math.sqrt(mRg * mRg + mYb * mYb)) * 100) / 100;
+    const mY = cY[ci] / nc, vY = Math.max(0, cY2[ci] / nc - mY * mY); o.rms = mY > 0 ? Math.round((Math.sqrt(vY) / mY) * 1000) / 1000 : 0;
+    o.dark = Math.round((cDark[ci] / nc / 255) * 1000) / 1000;
+    grid.push(o); cellObj[ci] = o; }
 
-  // Moran's I of the cell lightness field, rook contiguity
-  let morans_i = null;
-  const valid = []; for (let ci = 0; ci < G * G; ci++) if (!isNaN(field[ci])) valid.push(ci);
-  if (valid.length > 2) {
-    let mean = 0; for (const ci of valid) mean += field[ci]; mean /= valid.length;
-    let num = 0, den = 0, W = 0;
-    for (const ci of valid) { const d = field[ci] - mean; den += d * d; }
-    for (const ci of valid) { const gx = ci % G, gy = (ci / G) | 0, di = field[ci] - mean;
-      for (const [nx, ny] of [[gx - 1, gy], [gx + 1, gy], [gx, gy - 1], [gx, gy + 1]]) {
-        if (nx < 0 || ny < 0 || nx >= G || ny >= G) continue; const nj = ny * G + nx;
-        if (isNaN(field[nj])) continue; num += di * (field[nj] - mean); W++; } }
-    if (den > 0 && W > 0) morans_i = Math.round((valid.length / W) * (num / den) * 1000) / 1000;
+  const morans = {};
+  for (const ch of chans) {
+    const field = new Float64Array(NC).fill(NaN);
+    for (let ci = 0; ci < NC; ci++) if (cellObj[ci]) field[ci] = cellChanVal(cellObj[ci], ch);
+    morans[ch] = moransI(field, GX, GY);
   }
 
   const diag = Math.sqrt(w * w + h * h);
@@ -1108,14 +1243,14 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridN, nAnalyz
     c.centroid_x_rel = Math.round(cx / w * 1000) / 1000; c.centroid_y_rel = Math.round(cy / h * 1000) / 1000;
     c.spatial_spread_rel = Math.round(spread / diag * 1000) / 1000; });
 
-  return { rows, cols, grid, morans_i, morans_channel: chan, gridN: G };
+  return { rows, cols, grid, morans, morans_channels: chans, gridX: GX, gridY: GY };
 }
 
 // ── Build analysis for one set of pixels ────────────────────────────
 // rgba: Uint8ClampedArray (RGBA), w/h at analysis resolution
 function analyzePixels(rgba, w, h, opts) {
   const { numClusters, transparencyBg, includePixel, includeLab = true, pixelStep = 1,
-          includeSpatial = false, gridSize = 8, spatialChannel = 'L' } = opts;
+          includeSpatial = false, gridX = 8, gridY = 8, lockRatio = false, moranChannels = ['L'] } = opts;
   const bgColors = { white: [255, 255, 255], black: [0, 0, 0], gray: [128, 128, 128] };
 
   const nAll = w * h;
@@ -1227,9 +1362,10 @@ function analyzePixels(rgba, w, h, opts) {
   // Spatial structure (attaches centroids to clusters, returns profiles/grid/Moran's I)
   let spatial = null;
   if (includeSpatial) {
-    spatial = computeSpatial(pixels, coords, w, h, km ? km.labels : null, clusters, gridSize, nAnalyzed, spatialChannel);
-    metrics.morans_i = spatial.morans_i;
-    metrics.morans_channel = spatial.morans_channel;
+    const gyEff = lockRatio ? Math.max(1, Math.round(gridX * h / w)) : gridY;   // square cells when locked to image ratio
+    spatial = computeSpatial(pixels, coords, w, h, km ? km.labels : null, clusters, gridX, gyEff, nAnalyzed, moranChannels);
+    metrics.morans = spatial.morans;
+    metrics.morans_channels = spatial.morans_channels;
   }
 
   // Compact quantized representation for image export (each pixel → its cluster colour)
@@ -1412,14 +1548,18 @@ async function analyzeImages() {
     precision:      parseInt(document.getElementById('precision').value, 10),
     numClusters:    parseInt(document.getElementById('numClusters').value, 10),
     transparencyBg: document.getElementById('transparencyBg').value,
-    includeLab:     document.getElementById('includeLab').checked,
+    includeLab:     labSelected(),
     includeExif:    document.getElementById('includeExif').checked,
     includeHistogram: document.getElementById('includeHistogram').checked,
     includePixel:   document.getElementById('includePixel').checked,
     pixelStep:      Math.max(1, parseInt(document.getElementById('pixelStep').value, 10) || 1),
     includeSpatial: document.getElementById('includeSpatial').checked,
-    gridSize:       Math.max(2, parseInt(document.getElementById('gridSize').value, 10) || 8),
-    spatialChannel: document.getElementById('spatialChannel').value || 'L',
+    gridX:          Math.max(1, parseInt(document.getElementById('gridX').value, 10) || 8),
+    gridY:          Math.max(1, parseInt(document.getElementById('gridY').value, 10) || 8),
+    lockRatio:      document.getElementById('lockRatio').checked,
+    moranChannels:  Array.from(document.querySelectorAll('.moranCh:checked')).map(c => c.value),
+    includeViz:     document.getElementById('includeViz').checked,
+    vizTypes:       Array.from(document.querySelectorAll('.vizType:checked')).map(c => c.value),
   };
 
   if (opts.includePixel && sources.length * opts.precision * opts.precision > 2_000_000) {
@@ -1504,6 +1644,32 @@ async function analyzeImages() {
 }
 
 // ── Rendering ───────────────────────────────────────────────────────
+function vizDetailsHtml(r, opts) {
+  if (!opts.includeViz) return '';
+  const vt = (opts.vizTypes && opts.vizTypes.length) ? opts.vizTypes : ['original', 'palette', 'cluster', 'grid', 'gridheat', 'profiles', 'hist'];
+  const opt = [];
+  if (vt.includes('original')) opt.push(['original', 'Original image']);
+  if (r.clusters.length && vt.includes('palette')) opt.push(['palette', 'Palette']);
+  if (r.clusters.length && vt.includes('cluster')) opt.push(['cluster', 'Cluster-region image']);
+  if (r.spatial && vt.includes('grid')) opt.push(['grid', 'Grid image']);
+  if (r.spatial && vt.includes('gridheat')) opt.push(['gridheat', 'Grid heatmap']);
+  if (r.spatial && vt.includes('profiles')) opt.push(['profiles', 'Row/column profile']);
+  if (vt.includes('hist')) opt.push(['hist', 'H/S/V histogram']);
+  if (!opt.length) return '';
+  const options = opt.map(o => `<option value="${o[0]}">${o[1]}</option>`).join('');
+  return `
+        <details class="hist-details" ontoggle="if (this.open) showViz(${r.id}, document.getElementById('vizsel-${r.id}').value)">
+          <summary>Visualizations</summary>
+          <div class="hist-body">
+            <div class="viz-controls" style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">
+              <select id="vizsel-${r.id}" onchange="showViz(${r.id}, this.value)">${options}</select>
+              <div id="vizctl-${r.id}"></div>
+              <button class="btn btn-outline btn-sm" onclick="downloadVizPNG(${r.id})">⬇ PNG</button>
+            </div>
+            <canvas id="viz-${r.id}" class="hist-canvas" width="660" height="240"></canvas>
+          </div>
+        </details>`;
+}
 function renderResults(cards, total, ok, failed, opts) {
   window._lastRender = { cards, total, ok, failed, opts };
   let html = `<div class="summary-bar">
@@ -1517,7 +1683,7 @@ function renderResults(cards, total, ok, failed, opts) {
       html += `<button class="btn btn-outline btn-sm" onclick="downloadClusterCSV()">⬇ Clusters CSV</button>`;
     html += `<button class="btn btn-outline btn-sm" onclick="downloadImageCSV()">⬇ Image summary CSV</button>`;
     if (opts.includeHistogram)
-      html += `<button class="btn btn-outline btn-sm" onclick="downloadHistogramCSV()">⬇ Hue histogram CSV</button>`;
+      html += `<button class="btn btn-outline btn-sm" onclick="downloadHistogramCSV()">⬇ Histogram CSV</button>`;
     if (opts.includePixel)
       html += `<button class="btn btn-outline btn-sm" onclick="downloadPixelCSV()">⬇ Pixel CSV</button>`;
     if (opts.includeSpatial) {
@@ -1528,12 +1694,20 @@ function renderResults(cards, total, ok, failed, opts) {
   }
   html += `</div>`;
 
-  // Dataset-level histogram panel
+  // Dataset visualizations panel
   if (ok) {
     html += `<div class="card" style="padding:0.8rem 1rem 1rem">
-      <div class="card-title" style="margin-bottom:0.55rem">Dataset histogram — all analyzed images</div>
-      <div class="hist-controls" id="histctl-all">${histControlsHtml('all')}</div>
-      <canvas id="hist-all" class="hist-canvas" width="660" height="200"></canvas>
+      <div class="card-title" style="margin-bottom:0.55rem">Dataset visualizations — all ${ok} analyzed images</div>
+      <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">
+        <select id="dsSel" onchange="showDatasetViz(this.value)">
+          <option value="hist">Histogram (summed)</option>
+          <option value="palette">Aggregate palette</option>
+          <option value="dist">Metric distribution</option>
+        </select>
+        <div id="dsctl"></div>
+        <button class="btn btn-outline btn-sm" onclick="downloadDatasetPNG()">⬇ PNG</button>
+      </div>
+      <canvas id="ds-canvas" class="hist-canvas" width="660" height="240"></canvas>
     </div>`;
   }
 
@@ -1582,28 +1756,14 @@ function renderResults(cards, total, ok, failed, opts) {
         </div>
         <div class="metric-row">${chips.map(c => `<span class="metric-chip">${c}</span>`).join('')}</div>
         ${r.clusters.length ? `<div class="swatches">${renderSwatches(r.clusters)}</div>` : '<div style="padding:0.6rem"></div>'}
-        <details class="hist-details" ontoggle="if (this.open) showViz(${r.id}, document.getElementById('vizsel-${r.id}').value)">
-          <summary>Visualizations</summary>
-          <div class="hist-body">
-            <div class="viz-controls" style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">
-              <select id="vizsel-${r.id}" onchange="showViz(${r.id}, this.value)">
-                ${r.clusters.length ? '<option value="palette">Palette</option><option value="cluster">Cluster-region image</option>' : ''}
-                ${r.spatial ? '<option value="grid">Grid image</option><option value="gridheat">Grid heatmap</option><option value="profiles">Row/column profile</option>' : ''}
-                <option value="hist">H/S/V histogram</option>
-              </select>
-              <div id="vizctl-${r.id}"></div>
-              <button class="btn btn-outline btn-sm" onclick="downloadVizPNG(${r.id})">⬇ PNG</button>
-            </div>
-            <canvas id="viz-${r.id}" class="hist-canvas" width="660" height="240"></canvas>
-          </div>
-        </details>
+        ${vizDetailsHtml(r, opts)}
       </div>`;
   }).join('');
 
   const resultsEl = document.getElementById('results');
   resultsEl.innerHTML = html;
   resultsEl.classList.toggle('compact', compactResults);
-  if (ok) drawHist('all');
+  if (ok) showDatasetViz('hist');
 }
 
 function toggleCompact() {
@@ -1628,6 +1788,104 @@ function renderSwatches(clusters) {
 
 // ── H/S/V histograms ────────────────────────────────────────────────
 const HIST_MODES = { hue: 'Hue', sat: 'Saturation', val: 'Value' };
+
+// ── Dataset visualizations (histogram, aggregate palette, metric distribution) ──
+window._dsState = { kind: 'hist', channel: 'hue', metric: 'colourfulness' };
+function dsCanvas() { return document.getElementById('ds-canvas'); }
+function dsMetricOptions() {
+  const opts = [['colourfulness', 'colourfulness'], ['redness', 'redness'], ['cct', 'CCT'], ['rms_contrast', 'RMS contrast'], ['dark_channel', 'dark-channel'],
+    ['warm_pct', 'warm %'], ['cool_pct', 'cool %'], ['neutral_pct', 'neutral %'], ['hue_entropy', 'hue entropy'], ['hue_circular_variance', 'hue circular variance'],
+    ['HSV_S_mean', 'HSV S mean'], ['HSV_V_mean', 'HSV V mean'], ['LAB_L_mean', 'LAB L* mean'], ['LCH_C_mean', 'LCH C*ab mean']];
+  const sm = window._results && window._results[0] && window._results[0].metrics.morans;
+  if (sm) Object.keys(sm).forEach(ch => opts.push(['morans_i_' + ch, "Moran's I " + ch]));
+  return opts;
+}
+function dsMetricValue(m, key) {
+  if (key.indexOf('morans_i_') === 0) return m.morans ? m.morans[key.slice(9)] : null;
+  const mm = key.match(/^(RGB|HSV|LAB|LCH)_([A-Za-z])_(\w+)$/);
+  if (mm) { const chn = mm[1] + '_' + mm[2].toUpperCase(); return (m.ch && m.ch[chn]) ? m.ch[chn][mm[3]] : null; }
+  return m[key];
+}
+function showDatasetViz(kind) {
+  window._dsState.kind = kind;
+  const ctl = document.getElementById('dsctl');
+  if (ctl) {
+    if (kind === 'hist') ctl.innerHTML = ['hue', 'sat', 'val'].map(ch =>
+      `<label style="font-size:0.72rem;margin-right:6px"><input type="radio" name="dsch" value="${ch}" ${window._dsState.channel === ch ? 'checked' : ''} onclick="setDsChannel('${ch}')"> ${({ hue: 'hue', sat: 'saturation', val: 'value' })[ch]}</label>`).join('');
+    else if (kind === 'dist') ctl.innerHTML = '<span style="font-size:0.72rem">metric:</span> <select style="font-size:0.72rem" onchange="setDsMetric(this.value)">' +
+      dsMetricOptions().map(o => `<option value="${o[0]}" ${window._dsState.metric === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+    else ctl.innerHTML = '';
+  }
+  drawDatasetViz();
+}
+function setDsChannel(ch) { window._dsState.channel = ch; drawDatasetViz(); }
+function setDsMetric(mk) { window._dsState.metric = mk; drawDatasetViz(); }
+function drawDatasetViz() { const cv = dsCanvas(); if (cv) renderDatasetViz(cv.getContext('2d'), cv.width, cv.height); }
+function aggregatePalette() {
+  const agg = {};
+  for (const r of (window._results || [])) for (const c of (r.clusters || [])) {
+    const q = ((c.red >> 3) << 3) + ',' + ((c.green >> 3) << 3) + ',' + ((c.blue >> 3) << 3);
+    agg[q] = (agg[q] || 0) + c.pixel_count;
+  }
+  const items = Object.keys(agg).map(k => ({ rgb: k.split(',').map(Number), w: agg[k] }));
+  items.sort((a, b) => rgbToHsv(a.rgb[0], a.rgb[1], a.rgb[2])[0] - rgbToHsv(b.rgb[0], b.rgb[1], b.rgb[2])[0]);
+  const tot = items.reduce((s, i) => s + i.w, 0) || 1; items.forEach(i => i.frac = i.w / tot);
+  return items;
+}
+function renderDatasetViz(ctx, W, H) {
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const st = window._dsState;
+  if (st.kind === 'palette') {
+    ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText('Aggregate palette — all images, sorted by hue', 8, 14);
+    const items = aggregatePalette(), mL = 8, mT = 20, mB = 8, plotW = W - 16, plotH = H - mT - mB; let x = mL;
+    items.forEach(i => { const w = i.frac * plotW; ctx.fillStyle = `rgb(${i.rgb[0]},${i.rgb[1]},${i.rgb[2]})`; ctx.fillRect(x, mT, Math.max(0, w), plotH); x += w; });
+    return;
+  }
+  if (st.kind === 'dist') {
+    const key = st.metric, label = (dsMetricOptions().find(o => o[0] === key) || [key, key])[1];
+    const vals = (window._results || []).map(r => dsMetricValue(r.metrics, key)).filter(v => typeof v === 'number' && isFinite(v));
+    const mL = 44, mR = 10, mT = 22, mB = 30, plotW = W - mL - mR, plotH = H - mT - mB;
+    ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText('Distribution of ' + label + ' across ' + vals.length + ' images', mL, 14);
+    if (!vals.length) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('No data', mL, mT + plotH / 2); return; }
+    const mn = Math.min(...vals), mx = Math.max(...vals), NB = Math.min(20, Math.max(5, Math.round(Math.sqrt(vals.length)))), span = (mx - mn) || 1;
+    const bins = new Array(NB).fill(0); vals.forEach(v => bins[Math.min(NB - 1, Math.floor((v - mn) / span * NB))]++);
+    const maxc = Math.max(...bins, 1), bw = plotW / NB;
+    for (let i = 0; i < NB; i++) { const bh = (bins[i] / maxc) * plotH; ctx.fillStyle = '#3a6ea5'; ctx.fillRect(mL + i * bw + 1, mT + plotH - bh, Math.max(1, bw - 2), bh); }
+    const mean = vals.reduce((s, v) => s + v, 0) / vals.length, sorted = vals.slice().sort((a, b) => a - b), median = sorted[Math.floor(sorted.length / 2)];
+    const xpos = v => mL + ((v - mn) / span) * plotW;
+    ctx.strokeStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(xpos(mean), mT); ctx.lineTo(xpos(mean), mT + plotH); ctx.stroke();
+    ctx.strokeStyle = '#27ae60'; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(xpos(median), mT); ctx.lineTo(xpos(median), mT + plotH); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#dde8ed'; ctx.beginPath(); ctx.moveTo(mL, mT); ctx.lineTo(mL, mT + plotH); ctx.lineTo(mL + plotW, mT + plotH); ctx.stroke();
+    ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(mn.toFixed(mn % 1 ? 2 : 0), mL, mT + plotH + 13); ctx.fillText(mx.toFixed(mx % 1 ? 2 : 0), mL + plotW, mT + plotH + 13);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#c0392b'; ctx.fillText('mean ' + mean.toFixed(2), mL + 4, mT + 10);
+    ctx.fillStyle = '#27ae60'; ctx.fillText('median ' + (+median).toFixed(2), mL + 4, mT + 22);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#6b7a8d'; ctx.fillText(String(maxc), mL - 4, mT + 8); ctx.fillText('0', mL - 4, mT + plotH + 3);
+    ctx.textAlign = 'left';
+    return;
+  }
+  const mode = st.channel === 'sat' ? 'sat' : st.channel === 'val' ? 'val' : 'hue';
+  const key = mode === 'hue' ? 'hue_bins' : mode === 'sat' ? 'sat_bins' : 'val_bins', nb = mode === 'hue' ? 36 : 20;
+  const bins = new Array(nb).fill(0); let denom = 0;
+  for (const r of (window._results || [])) { const m = r.metrics; m[key].forEach((v, i) => bins[i] += v); denom += mode === 'hue' ? (m.chromatic_n || 0) : m.analyzed_pixels; }
+  const mL = 40, mR = 10, mT = 22, mB = 28, plotW = W - mL - mR, plotH = H - mT - mB;
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText(({ hue: 'Hue', sat: 'Saturation', val: 'Value' })[mode] + ' histogram — summed across dataset', mL, 14);
+  if (!denom) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('No data', mL, mT + plotH / 2); return; }
+  const pcts = bins.map(b => b / denom * 100), maxp = Math.max(1, ...pcts), bw = plotW / nb;
+  for (let i = 0; i < nb; i++) { const bh = (pcts[i] / maxp) * plotH; ctx.fillStyle = histBarColor(mode, i, nb); ctx.fillRect(mL + i * bw + 1, mT + plotH - bh, Math.max(1, bw - 2), bh); }
+  ctx.strokeStyle = '#dde8ed'; ctx.beginPath(); ctx.moveTo(mL, mT); ctx.lineTo(mL, mT + plotH); ctx.lineTo(mL + plotW, mT + plotH); ctx.stroke();
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillText('0%', mL - 4, mT + plotH + 3); ctx.fillText(maxp.toFixed(1) + '%', mL - 4, mT + 8);
+  ctx.textAlign = 'center';
+  if (mode === 'hue') { for (let d = 0; d <= 360; d += 60) ctx.fillText(d + '°', mL + (d / 360) * plotW, mT + plotH + 14); }
+  else { for (let d = 0; d <= 100; d += 25) ctx.fillText(String(d), mL + (d / 100) * plotW, mT + plotH + 14); }
+  ctx.textAlign = 'left';
+}
+function downloadDatasetPNG() {
+  const cv = dsCanvas(); if (!cv) return;
+  const SCALE = 4, off = document.createElement('canvas'); off.width = cv.width * SCALE; off.height = cv.height * SCALE;
+  const octx = off.getContext('2d'); octx.scale(SCALE, SCALE); renderDatasetViz(octx, cv.width, cv.height);
+  downloadPngDPI(off, 'dataset_' + window._dsState.kind + '_' + todayStamp() + '.png', 300);
+}
 
 function histControlsHtml(id) {
   const mode = window._histModes[id] || 'hue';
@@ -1785,16 +2043,23 @@ function recById(id) { return (window._results || []).find(x => x.id === id); }
 function vizCanvas(id) { return document.getElementById('viz-' + id); }
 
 function showViz(id, kind) {
-  const prev = window._vizState[id] || {};
-  window._vizState[id] = { kind, channel: prev.channel || 'hue' };
+  const r = recById(id), prev = window._vizState[id] || {};
+  window._vizState[id] = { kind, channel: prev.channel || 'hue', heatCh: prev.heatCh };
   const ctl = document.getElementById('vizctl-' + id);
-  if (ctl) ctl.innerHTML = (kind === 'hist')
-    ? ['hue', 'saturation', 'value'].map(ch =>
-        `<label style="font-size:0.72rem;margin-right:6px"><input type="radio" name="vizch-${id}" value="${ch}" ${window._vizState[id].channel === ch ? 'checked' : ''} onclick="setVizChannel(${id},'${ch}')"> ${ch}</label>`).join('')
-    : '';
+  if (ctl) {
+    if (kind === 'hist') ctl.innerHTML = ['hue', 'saturation', 'value'].map(ch =>
+      `<label style="font-size:0.72rem;margin-right:6px"><input type="radio" name="vizch-${id}" value="${ch}" ${window._vizState[id].channel === ch ? 'checked' : ''} onclick="setVizChannel(${id},'${ch}')"> ${ch}</label>`).join('');
+    else if (kind === 'gridheat' && r && r.spatial) {
+      const chs = r.spatial.morans_channels || ['L'];
+      if (!window._vizState[id].heatCh) window._vizState[id].heatCh = chs[0];
+      ctl.innerHTML = '<span style="font-size:0.72rem">channel / statistic:</span> <select style="font-size:0.72rem" onchange="setHeatCh(' + id + ', this.value)">' +
+        chs.map(c => `<option value="${c}" ${window._vizState[id].heatCh === c ? 'selected' : ''}>${c}</option>`).join('') + '</select>';
+    } else ctl.innerHTML = '';
+  }
   drawViz(id);
 }
 function setVizChannel(id, ch) { if (window._vizState[id]) window._vizState[id].channel = ch; drawViz(id); }
+function setHeatCh(id, ch) { if (window._vizState[id]) window._vizState[id].heatCh = ch; drawViz(id); }
 
 function hsvToRgbLocal(h, s, v) {
   h /= 360; s /= 100; v /= 100;
@@ -1807,12 +2072,21 @@ function hsvToRgbLocal(h, s, v) {
 
 function renderViz(ctx, W, H, r, st) {
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
-  if (st.kind === 'palette') drawVizPalette(ctx, W, H, r);
+  if (st.kind === 'original') drawVizOriginal(ctx, W, H, r);
+  else if (st.kind === 'palette') drawVizPalette(ctx, W, H, r);
   else if (st.kind === 'cluster') drawVizImageData(ctx, W, H, r.quant);
   else if (st.kind === 'grid') drawVizGrid(ctx, W, H, r, false);
-  else if (st.kind === 'gridheat') drawVizGrid(ctx, W, H, r, true);
+  else if (st.kind === 'gridheat') drawVizGrid(ctx, W, H, r, true, st.heatCh);
   else if (st.kind === 'profiles') drawVizProfiles(ctx, W, H, r);
   else drawVizHist(ctx, W, H, r, st.channel || 'hue');
+}
+function drawVizOriginal(ctx, W, H, r) {
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText('Original image', 8, 14);
+  let img = r._imgEl;
+  if (!img) { img = r._imgEl = new Image(); img.onload = () => drawViz(r.id); img.src = r.thumbUrl; }
+  if (!img.complete || !img.naturalWidth) return;   // redraws on load
+  const mT = 20, avW = W - 16, avH = H - mT - 8, scale = Math.min(avW / img.naturalWidth, avH / img.naturalHeight), dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+  ctx.drawImage(img, (W - dw) / 2, mT + (avH - dh) / 2, dw, dh);
 }
 function drawViz(id) {
   const r = recById(id), cv = vizCanvas(id); if (!r || !cv) return;
@@ -1831,8 +2105,7 @@ function drawVizPalette(ctx, W, H, r) {
   if (!cs.length) { ctx.fillStyle = '#999'; ctx.font = '12px sans-serif'; ctx.fillText('No clusters', 10, 34); return; }
   const mL = 8, mR = 8, mT = 20, mB = 26, plotW = W - mL - mR, plotH = H - mT - mB;
   const total = cs.reduce((a, c) => a + c.pixel_count, 0) || 1; let x = mL;
-  cs.forEach(c => { const w = (c.pixel_count / total) * plotW; ctx.fillStyle = c.hex; ctx.fillRect(x, mT, Math.max(0, w), plotH);
-    if (w > 30) { ctx.fillStyle = '#000'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(c.percentage.toFixed(0) + '%', x + w / 2, mT + plotH / 2 + 3); ctx.textAlign = 'left'; } x += w; });
+  cs.forEach(c => { const w = (c.pixel_count / total) * plotW; ctx.fillStyle = c.hex; ctx.fillRect(x, mT, Math.max(0, w), plotH); x += w; });
   ctx.strokeStyle = '#dde8ed'; ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
   for (let p = 0; p <= 100; p += 25) { const px = mL + (p / 100) * plotW; ctx.beginPath(); ctx.moveTo(px, mT + plotH); ctx.lineTo(px, mT + plotH + 4); ctx.stroke(); ctx.fillText(p + '% of pixels', px, mT + plotH + 15); }
   ctx.textAlign = 'left';
@@ -1848,26 +2121,29 @@ function drawVizImageData(ctx, W, H, q) {
     img.data[o] = q.colors[i * 3]; img.data[o + 1] = q.colors[i * 3 + 1]; img.data[o + 2] = q.colors[i * 3 + 2]; img.data[o + 3] = 255; }
   octx.putImageData(img, 0, 0);
   const mT = 20, avW = W - 16, avH = H - mT - 8, scale = Math.min(avW / q.w, avH / q.h), dw = q.w * scale, dh = q.h * scale;
+  ctx.imageSmoothingEnabled = false;   // crisp nearest-neighbour, no blur on upscale
   ctx.drawImage(off, (W - dw) / 2, mT + (avH - dh) / 2, dw, dh);
 }
-function gridCellVal(o, ch) { return ({ L: o.lightness, C: o.chroma, S: o.saturation, a: o.lab_a, b: o.lab_b })[ch]; }
-function drawVizGrid(ctx, W, H, r, heat) {
+function drawVizGrid(ctx, W, H, r, heat, heatCh) {
   if (!r.spatial) { ctx.fillStyle = '#999'; ctx.font = '12px sans-serif'; ctx.fillText('Enable Spatial structure', 10, 24); return; }
-  const G = r.spatial.gridN, ch = r.spatial.morans_channel || 'L';
-  const chName = { L: 'L*', C: 'C*ab', S: 'saturation', a: 'a*', b: 'b*' }[ch] || ch;
-  const mL = 26, mT = 20, mB = 16, mR = heat ? 60 : 8, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / G, chh = plotH / G;
+  const GX = r.spatial.gridX, GY = r.spatial.gridY;
+  const ch = heat ? (heatCh || (r.spatial.morans_channels && r.spatial.morans_channels[0]) || 'L') : null;
+  const chName = { R: 'R', G: 'G', B: 'B', S: 'saturation', V: 'value', L: 'L*', a: 'a*', b: 'b*', C: 'C*ab', red: 'redness', cct: 'CCT', colf: 'colourfulness', rms: 'RMS contrast', dark: 'dark-channel' }[ch] || ch;
+  const mI = (heat && r.spatial.morans && r.spatial.morans[ch] != null) ? r.spatial.morans[ch] : null;
+  const mL = 26, mT = 20, mB = 16, mR = heat ? 62 : 8, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / GX, chh = plotH / GY;
   ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
-  ctx.fillText(heat ? `Grid heatmap — ${chName}${r.spatial.morans_i != null ? `  (Moran's I ${r.spatial.morans_i})` : ''}` : 'Grid — mean colour per cell', mL, 14);
+  ctx.fillText(heat ? `Grid heatmap — ${chName}${mI != null ? `  (Moran's I ${mI})` : ''}` : 'Grid — mean colour per cell', mL, 14);
   let vmin = Infinity, vmax = -Infinity;
-  if (heat) r.spatial.grid.forEach(o => { const v = gridCellVal(o, ch); if (v < vmin) vmin = v; if (v > vmax) vmax = v; });
-  r.spatial.grid.forEach(o => { ctx.fillStyle = heat ? vizRamp((gridCellVal(o, ch) - vmin) / ((vmax - vmin) || 1)) : `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`;
+  if (heat) r.spatial.grid.forEach(o => { const v = cellChanVal(o, ch); if (v < vmin) vmin = v; if (v > vmax) vmax = v; });
+  r.spatial.grid.forEach(o => { ctx.fillStyle = heat ? vizRamp((cellChanVal(o, ch) - vmin) / ((vmax - vmin) || 1)) : `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`;
     ctx.fillRect(mL + o.cell_x * cw, mT + o.cell_y * chh, Math.ceil(cw), Math.ceil(chh)); });
   ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.beginPath();
-  for (let i = 0; i <= G; i++) { ctx.moveTo(mL + i * cw, mT); ctx.lineTo(mL + i * cw, mT + plotH); ctx.moveTo(mL, mT + i * chh); ctx.lineTo(mL + plotW, mT + i * chh); }
+  for (let i = 0; i <= GX; i++) { ctx.moveTo(mL + i * cw, mT); ctx.lineTo(mL + i * cw, mT + plotH); }
+  for (let j = 0; j <= GY; j++) { ctx.moveTo(mL, mT + j * chh); ctx.lineTo(mL + plotW, mT + j * chh); }
   ctx.stroke();
-  ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; const step = Math.max(1, Math.round(G / 8));
-  ctx.textAlign = 'center'; for (let i = 0; i <= G; i += step) ctx.fillText(i, mL + i * cw, mT + plotH + 12);
-  ctx.textAlign = 'right'; for (let i = 0; i <= G; i += step) ctx.fillText(i, mL - 4, mT + i * chh + 3);
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
+  ctx.textAlign = 'center'; const sx = Math.max(1, Math.round(GX / 8)); for (let i = 0; i <= GX; i += sx) ctx.fillText(i, mL + i * cw, mT + plotH + 12);
+  ctx.textAlign = 'right'; const sy = Math.max(1, Math.round(GY / 8)); for (let j = 0; j <= GY; j += sy) ctx.fillText(j, mL - 4, mT + j * chh + 3);
   ctx.textAlign = 'left';
   if (heat && vmax > vmin) { const lx = W - mR + 16, ly = mT, lh = plotH, lw = 12;
     for (let k = 0; k < lh; k++) { ctx.fillStyle = vizRamp(1 - k / lh); ctx.fillRect(lx, ly + k, lw, 1); }
@@ -1903,6 +2179,27 @@ function drawVizHist(ctx, W, H, r, channel) {
   else { for (let d = 0; d <= 100; d += 25) { const px = mL + (d / 100) * plotW; ctx.beginPath(); ctx.moveTo(px, mT + plotH); ctx.lineTo(px, mT + plotH + 4); ctx.stroke(); ctx.fillText(String(d), px, mT + plotH + 15); } ctx.fillText((mode === 'sat' ? 'saturation' : 'value') + ' (0–100, all pixels)', mL + plotW / 2, mT + plotH + 26); }
   ctx.textAlign = 'left';
 }
+// Write a pHYs chunk so the PNG reports a physical resolution (e.g. 300 dpi) to print/layout software
+const _CRCT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function _crc32b(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = _CRCT[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function pngSetDPI(u8, dpi) {
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10]; for (let i = 0; i < 8; i++) if (u8[i] !== sig[i]) return u8;
+  const ppm = Math.round(dpi / 0.0254);
+  const ihdrLen = (u8[8] << 24) | (u8[9] << 16) | (u8[10] << 8) | u8[11], at = 8 + 4 + 4 + ihdrLen + 4;
+  const chunk = new Uint8Array(21), dv = new DataView(chunk.buffer);
+  dv.setUint32(0, 9); chunk[4] = 0x70; chunk[5] = 0x48; chunk[6] = 0x59; chunk[7] = 0x73; // 'pHYs'
+  dv.setUint32(8, ppm); dv.setUint32(12, ppm); chunk[16] = 1;                              // unit = metre
+  dv.setUint32(17, _crc32b(chunk.subarray(4, 17)));
+  const out = new Uint8Array(u8.length + chunk.length);
+  out.set(u8.subarray(0, at), 0); out.set(chunk, at); out.set(u8.subarray(at), at + chunk.length);
+  return out;
+}
+function downloadPngDPI(canvas, filename, dpi) {
+  canvas.toBlob(async b => {
+    const u8 = new Uint8Array(await b.arrayBuffer());
+    downloadBlob(new Blob([pngSetDPI(u8, dpi || 300)], { type: 'image/png' }), filename);
+  }, 'image/png');
+}
 function downloadVizPNG(id) {
   const r = recById(id), cv = vizCanvas(id); if (!r || !cv) return;
   const st = window._vizState[id] || { kind: 'palette' };
@@ -1911,7 +2208,7 @@ function downloadVizPNG(id) {
   const octx = off.getContext('2d'); octx.scale(SCALE, SCALE);
   renderViz(octx, cv.width, cv.height, r, st);
   const label = st.kind === 'cluster' ? 'cluster-region' : (st.kind === 'gridheat' ? 'grid-heatmap' : st.kind);
-  off.toBlob(b => downloadBlob(b, stripExt(r.filename) + '_' + label + '.png'), 'image/png');
+  downloadPngDPI(off, stripExt(r.filename) + '_' + label + '.png', 300);
 }
 
 function stripExt(name) { return name.replace(/\.[^.]+$/, ''); }
@@ -1919,13 +2216,47 @@ function stripExt(name) { return name.replace(/\.[^.]+$/, ''); }
 // Enable the inline option inputs only when their checkbox is ticked
 function toggleOpt() {
   const p = document.getElementById('includePixel'), ps = document.getElementById('pixelStep');
-  const s = document.getElementById('includeSpatial'), gs = document.getElementById('gridSize'), sc = document.getElementById('spatialChannel');
+  const s = document.getElementById('includeSpatial');
   if (ps) ps.disabled = !(p && p.checked);
-  const spatialOn = !!(s && s.checked);
-  if (gs) gs.disabled = !spatialOn;
-  if (sc) sc.disabled = !spatialOn;
+  const on = !!(s && s.checked), lock = document.getElementById('lockRatio');
+  const gx = document.getElementById('gridX'), gy = document.getElementById('gridY');
+  if (gx) gx.disabled = !on;
+  if (lock) lock.disabled = !on;
+  const locked = on && lock && lock.checked;
+  if (gy) { gy.disabled = !on || locked; gy.style.display = locked ? 'none' : ''; }
+  const note = document.getElementById('gridYnote'); if (note) note.style.display = locked ? '' : 'none';
+  document.querySelectorAll('.moranCh').forEach(c => c.disabled = !on);
 }
 window.addEventListener('DOMContentLoaded', toggleOpt);
+
+// Column-selection presets + group "all" toggles
+const ALL_GROUPS = [['colSpace', 'allColSpace'], ['colStat', 'allColStat'], ['colMetric', 'allColMetric'],
+  ['moranCh', 'allMoranCh'], ['histCh', 'allHistCh'], ['vizType', 'allVizType']];
+function toggleAll(cls, cb) { document.querySelectorAll('.' + cls).forEach(c => c.checked = cb.checked); if (['colSpace', 'colStat', 'colMetric'].includes(cls)) clearPreset(); }
+function syncAllBoxes() {
+  ALL_GROUPS.forEach(([cls, id]) => { const box = document.getElementById(id); if (!box) return;
+    const items = document.querySelectorAll('.' + cls); box.checked = items.length > 0 && Array.from(items).every(i => i.checked); });
+}
+function clearPreset() { document.querySelectorAll('.btn.preset-active').forEach(b => b.classList.remove('preset-active')); }
+function labSelected() { return Array.from(document.querySelectorAll('.colSpace:checked')).some(c => c.value === 'LAB' || c.value === 'LCH'); }
+function applyPreset(name, btn) {
+  const set = (cls, vals) => document.querySelectorAll('.' + cls).forEach(c => c.checked = vals.includes(c.value));
+  if (name === 'full') {
+    set('colSpace', ['RGB', 'HSV', 'LAB', 'LCH']); set('colStat', ['mean', 'median', 'std', 'range', 'iqr']);
+    set('colMetric', ['colourfulness', 'redness', 'cct', 'rms_contrast', 'dark_channel', 'warm_pct', 'hue_entropy', 'hue_circular_variance']);
+  } else if (name === 'minimal') {
+    set('colSpace', ['HSV']); set('colStat', ['mean']); set('colMetric', ['colourfulness']);
+  } else {   // core
+    set('colSpace', ['RGB', 'HSV', 'LAB', 'LCH']); set('colStat', ['mean', 'median']);
+    set('colMetric', ['colourfulness', 'redness', 'cct', 'warm_pct', 'hue_entropy']);
+  }
+  clearPreset(); if (btn) btn.classList.add('preset-active'); syncAllBoxes();
+}
+window.addEventListener('DOMContentLoaded', () => {
+  syncAllBoxes();
+  document.querySelectorAll('.colSpace, .colStat, .colMetric').forEach(el => el.addEventListener('change', () => { clearPreset(); syncAllBoxes(); }));
+  document.querySelectorAll('.moranCh, .histCh, .vizType').forEach(el => el.addEventListener('change', syncAllBoxes));
+});
 
 // ── CSV builders ────────────────────────────────────────────────────
 function csvEscape(v) {
@@ -1957,7 +2288,7 @@ function todayStamp() {
 }
 
 function downloadClusterCSV() {
-  const includeLab = document.getElementById('includeLab').checked;
+  const includeLab = labSelected();
   const includeSpatial = document.getElementById('includeSpatial').checked;
   const header = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels',
     'cluster', 'hex', 'RGB_R', 'RGB_G', 'RGB_B', 'HSV_H', 'HSV_S', 'HSV_V'];
@@ -1980,61 +2311,64 @@ function downloadClusterCSV() {
 }
 
 function downloadImageCSV() {
-  const includeLab = document.getElementById('includeLab').checked;
   const includeSpatial = document.getElementById('includeSpatial').checked;
   const g = v => v == null ? '' : v;
-  // [header, value] pairs keep names and values aligned; SPACE_CHANNEL_STAT scheme
-  const base = m => [
-    ['RGB_R_mean', m.mean_r], ['RGB_R_median', m.median_r], ['RGB_G_mean', m.mean_g], ['RGB_G_median', m.median_g], ['RGB_B_mean', m.mean_b], ['RGB_B_median', m.median_b],
-    ['HSV_H_mean', m.mean_hue], ['HSV_H_median', m.median_hue], ['HSV_H_circvar', m.hue_circular_variance],
-    ['HSV_S_mean', m.mean_saturation], ['HSV_S_median', m.median_saturation], ['HSV_S_std', m.saturation_std], ['HSV_S_iqr', m.saturation_iqr],
-    ['HSV_V_mean', m.mean_value], ['HSV_V_median', m.median_value],
-  ];
-  const lab = m => [
-    ['LAB_L_mean', m.mean_lightness], ['LAB_L_median', m.median_lightness],
-    ['LAB_A_mean', m.mean_lab_a], ['LAB_A_median', m.median_lab_a], ['LAB_B_mean', m.mean_lab_b], ['LAB_B_median', m.median_lab_b],
-    ['LCH_L_mean', m.mean_lightness], ['LCH_L_median', m.median_lightness],
-    ['LCH_C_mean', m.mean_chroma], ['LCH_C_median', m.median_chroma], ['LCH_C_std', m.chroma_std], ['LCH_C_iqr', m.chroma_iqr],
-    ['LCH_H_mean', m.mean_lch_h], ['LCH_H_median', m.median_lch_h],
-  ];
-  const desc = m => [
-    ['colourfulness', m.colourfulness], ['redness', m.redness], ['cct', m.cct], ['rms_contrast', m.rms_contrast], ['dark_channel', m.dark_channel],
-    ['warm_pct', m.warm_pct], ['cool_pct', m.cool_pct], ['neutral_pct', m.neutral_pct], ['hue_entropy', m.hue_entropy],
-  ];
+  const sel = cls => Array.from(document.querySelectorAll('.' + cls + ':checked')).map(c => c.value);
+  let spaces = sel('colSpace'); if (!spaces.length) spaces = ['RGB', 'HSV', 'LAB', 'LCH'];
+  let stats = sel('colStat'); if (!stats.length) stats = ['mean', 'median'];
+  const metricSel = sel('colMetric');
+  const CH = { RGB: ['RGB_R', 'RGB_G', 'RGB_B'], HSV: ['HSV_H', 'HSV_S', 'HSV_V'], LAB: ['LAB_L', 'LAB_A', 'LAB_B'], LCH: ['LCH_L', 'LCH_C', 'LCH_H'] };
+  const sample = window._results[0].metrics;
+
+  const colourKeys = [];   // [headerName, channel, stat]
+  spaces.forEach(sp => (CH[sp] || []).forEach(chn => {
+    stats.forEach(st => { if (sample.ch && sample.ch[chn] && sample.ch[chn][st] !== undefined) colourKeys.push([chn + '_' + st, chn, st]); });
+    if (metricSel.includes('hue_circular_variance') && sample.ch && sample.ch[chn] && 'circvar' in sample.ch[chn]) colourKeys.push([chn + '_circvar', chn, 'circvar']);
+  }));
+
+  const METRIC_COLS = { colourfulness: ['colourfulness'], redness: ['redness'], cct: ['cct'], rms_contrast: ['rms_contrast'],
+    dark_channel: ['dark_channel'], warm_pct: ['warm_pct', 'cool_pct', 'neutral_pct'], hue_entropy: ['hue_entropy'] };
+  const metricKeys = [];
+  metricSel.forEach(mk => (METRIC_COLS[mk] || []).forEach(k => metricKeys.push(k)));
+  const moransKeys = (includeSpatial && sample.morans) ? Object.keys(sample.morans).map(c => 'morans_i_' + c) : [];
+
   const idCols = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels', 'opaque_pct',
     'exif_datetime', 'gps_lat', 'gps_lon', 'gps_alt', 'camera_make', 'camera_model', 'orientation'];
-  const sample = window._results[0].metrics;
-  const colourCols = [...base(sample), ...(includeLab ? lab(sample) : []), ...desc(sample), ...(includeSpatial ? [['morans_i', sample.morans_i], ['morans_i_channel', sample.morans_channel]] : [])];
-  const header = [...idCols, ...colourCols.map(p => p[0])];
+  const header = [...idCols, ...colourKeys.map(k => k[0]), ...metricKeys, ...moransKeys];
+
   const rows = window._results.map(r => {
     const m = r.metrics;
-    const cols = [...base(m), ...(includeLab ? lab(m) : []), ...desc(m), ...(includeSpatial ? [['morans_i', m.morans_i], ['morans_i_channel', m.morans_channel]] : [])];
+    const colour = colourKeys.map(([, chn, st]) => g(m.ch && m.ch[chn] ? m.ch[chn][st] : ''));
+    const met = metricKeys.map(k => g(m[k]));
+    const mor = moransKeys.map(k => g(m.morans ? m.morans[k.slice(9)] : ''));
     return [
       r.id, r.filename, r.source, r.width, r.height, m.analyzed_pixels, m.opaque_pct,
       r.exif.datetime ?? '', r.exif.gps_lat ?? '', r.exif.gps_lon ?? '', r.exif.gps_alt ?? '',
       r.exif.make ?? '', r.exif.model ?? '', r.exif.orientation ?? '',
-      ...cols.map(p => g(p[1])),
+      ...colour, ...met, ...mor,
     ];
   });
   downloadCSVText(buildCSV(header, rows), `colour_image-summary_${todayStamp()}.csv`);
 }
 
 function downloadHistogramCSV() {
-  const header = ['image_id', 'filename', 'hue_bin_start', 'hue_bin_end', 'pixel_count', 'pct_of_chromatic'];
+  const chans = Array.from(document.querySelectorAll('.histCh:checked')).map(c => c.value);
+  const use = chans.length ? chans : ['hue'];
+  const SPEC = { hue: { key: 'hue_bins', nb: 36, w: 10, denom: m => m.chromatic_n || 0 },
+                 sat: { key: 'sat_bins', nb: 20, w: 5, denom: m => m.analyzed_pixels },
+                 val: { key: 'val_bins', nb: 20, w: 5, denom: m => m.analyzed_pixels } };
+  const header = ['image_id', 'filename', 'channel', 'bin_start', 'bin_end', 'pixel_count', 'pct'];
   const rows = [];
   for (const r of window._results) {
-    const bins = r.metrics.hue_bins;
-    const n = r.metrics.chromatic_n || 0;
-    for (let i = 0; i < 36; i++) {
-      rows.push([r.id, r.filename, i * 10, i * 10 + 10, bins[i],
-        n ? Math.round((bins[i] / n) * 10000) / 100 : 0]);
-    }
+    const m = r.metrics;
+    for (const ch of use) { const sp = SPEC[ch]; if (!sp) continue; const bins = m[sp.key]; const dn = sp.denom(m) || 0;
+      for (let i = 0; i < sp.nb; i++) rows.push([r.id, r.filename, ch, i * sp.w, i * sp.w + sp.w, bins[i], dn ? Math.round((bins[i] / dn) * 10000) / 100 : 0]); }
   }
-  downloadCSVText(buildCSV(header, rows), `colour_hue-histogram_${todayStamp()}.csv`);
+  downloadCSVText(buildCSV(header, rows), `colour_histogram_${todayStamp()}.csv`);
 }
 
 function downloadPixelCSV() {
-  const includeLab = document.getElementById('includeLab').checked;
+  const includeLab = labSelected();
   const header = ['image_id', 'filename', 'x', 'y', 'hex', 'RGB_R', 'RGB_G', 'RGB_B',
     'HSV_H', 'HSV_S', 'HSV_V',
     ...(includeLab ? ['LAB_L', 'LAB_A', 'LAB_B', 'LCH_L', 'LCH_C', 'LCH_H'] : []),
@@ -2073,13 +2407,13 @@ function downloadProfilesCSV() {
 }
 
 function downloadGridCSV() {
-  const header = ['image_id', 'filename', 'grid_n', 'cell_x', 'cell_y', 'n',
+  const header = ['image_id', 'filename', 'grid_x', 'grid_y', 'cell_x', 'cell_y', 'n',
     'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'HSV_H_mean', 'HSV_S_mean', 'HSV_V_mean',
     'LAB_L_mean', 'LAB_A_mean', 'LAB_B_mean', 'LCH_C_mean'];
   const rows = [];
   for (const r of window._results) {
     if (!r.spatial) continue;
-    for (const o of r.spatial.grid) rows.push([r.id, r.filename, r.spatial.gridN, o.cell_x, o.cell_y, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.lab_a, o.lab_b, o.chroma]);
+    for (const o of r.spatial.grid) rows.push([r.id, r.filename, r.spatial.gridX, r.spatial.gridY, o.cell_x, o.cell_y, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.lab_a, o.lab_b, o.chroma]);
   }
   if (!rows.length) { setStatus('No spatial data — enable "Spatial structure" before analyzing.', 'warning'); return; }
   downloadCSVText(buildCSV(header, rows), `colour_grid_${todayStamp()}.csv`);
