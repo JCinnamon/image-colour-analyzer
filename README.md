@@ -55,7 +55,15 @@ Each result carries a **Visualizations** dropdown that opens one view below the 
 - **Row/column profile** — the mean-colour gradient along each axis (with Spatial structure on).
 - **H/S/V histogram** — hue, saturation or value distribution with gradient-filled bars, matching the dataset histogram, chosen with the channel toggle.
 
-All views carry axis scales and tick marks where relevant, and download as PNG at 4× the on-screen resolution.
+An **Original image** view is also available. All views carry axis scales and tick marks where relevant, and download as crisp PNG tagged at **300 dpi**. Which views are offered is chosen in the Visualization config section.
+
+## Dataset visualizations
+
+Across the whole set, the Dataset visualizations panel offers a summed hue/saturation/value histogram, an **aggregate palette** (every image's dominant colours combined and sorted by hue), and a **metric-distribution** view — a histogram of any image-level metric or Moran's I value across all images, with the mean and median marked. Each downloads as a 300 dpi PNG.
+
+## Configuration & columns
+
+Options are grouped into collapsible panels (Columns, Histogram table, Spatial structure, Visualization). Under **Columns** you choose which colour spaces (RGB/HSV/LAB/LCH), statistics (mean, median, std dev, range, IQR), and scene metrics to export, with Core / Full / Minimal presets and per-row "all" toggles — so CSVs stay as wide or as lean as you need. Column names follow a consistent `SPACE_CHANNEL_STAT` scheme.
 
 ---
 
