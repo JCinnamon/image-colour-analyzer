@@ -38,7 +38,7 @@ Tick **Spatial structure** to add, using the pixel positions the tool already ha
 - **Row and column profiles** — mean colour and metrics per image row and per column (CSV). Captures gradients in any orientation.
 - **Grid / tile table** — an N×N grid (size configurable) with per-cell colour and metrics (CSV), for spatial heat-maps and region comparison.
 - **Cluster spatial signature** — centroid (absolute and relative) and spatial spread of each dominant colour, added to the cluster table.
-- **Moran's I** — spatial autocorrelation of cell lightness (rook contiguity) in the image summary: one index of how spatially organised the colour is, from clustered (positive) to salt-and-pepper (negative).
+- **Moran's I** — spatial autocorrelation (rook contiguity) of a chosen channel, in the image summary with a companion `morans_i_channel` column: one index of how spatially organised the colour is, from clustered (positive) to salt-and-pepper (negative). A **channel selector** (Lightness L\*, Chroma C\*ab, Saturation, a\*, b\*) sets the channel used for both Moran's I and the grid heatmap; the opponent axes a\*/b\* are the correct way to capture hue's spatial structure (b\* tracks the blue-to-yellow smoke transition).
 
 Because GPS and capture date are exported with each image, sun position and other solar-geometry analyses can be computed downstream without re-running the tool.
 
@@ -51,8 +51,11 @@ Each result carries a **Visualizations** dropdown that opens one view below the 
 - **Palette** — the image's dominant-colour strip, sized by pixel share.
 - **Cluster-region image** — the image recoloured to its k dominant clusters.
 - **Grid image** — the N×N spatial grid rendered as mean-colour cells (with Spatial structure on).
+- **Grid heatmap** — the same grid coloured by the selected channel (L\*, C\*ab, saturation, a\* or b\*) with a colour-scale legend and the cell's Moran's I in the title.
 - **Row/column profile** — the mean-colour gradient along each axis (with Spatial structure on).
-- **H/S/V histogram** — hue, saturation or value distribution, chosen with the channel toggle.
+- **H/S/V histogram** — hue, saturation or value distribution with gradient-filled bars, matching the dataset histogram, chosen with the channel toggle.
+
+All views carry axis scales and tick marks where relevant, and download as PNG at 4× the on-screen resolution.
 
 ---
 
