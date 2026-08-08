@@ -29,6 +29,8 @@ Part of [Vis-O-Matic](https://www.jonathancinnamon.com/vis-o-matic/), alongside 
 
 **Colour spaces.** HSV separates hue, saturation and brightness; CIELAB/LCH are perceptually oriented, so numerical distances track perceived colour difference more faithfully. LAB/LCH values appear in the cluster, pixel and image tables when the **LAB/LCH** option is ticked (on by default); untick it to omit all LAB/LCH columns from every CSV.
 
+**Per-pixel descriptors.** The pixel-level table also carries the descriptors that are defined at a single pixel: `redness`, `cct`, `dark_channel`, and a `hue_class` label (warm / cool / neutral). Set-level metrics that have no per-pixel value — colourfulness, RMS contrast, hue entropy, Moran's I — remain image- or grid-level only.
+
 ---
 
 ## Spatial structure (optional)
@@ -60,6 +62,16 @@ An **Original image** view is also available. All views carry axis scales and ti
 ## Dataset visualizations
 
 Across the whole set, the Dataset visualizations panel offers a summed hue/saturation/value histogram, an **aggregate palette** (every image's dominant colours combined and sorted by hue), and a **metric-distribution** view — a histogram of any image-level metric or Moran's I value across all images, with the mean and median marked. Each downloads as a 300 dpi PNG.
+
+## Dataset spatial composites (metrics by x,y across the whole set)
+
+When Spatial structure is on, the Dataset panel also aggregates every image's grid into one common frame, so you can see spatial pattern across the *dataset* rather than a single sky. Five composites (each a 300 dpi PNG): a **mean composite grid** (average of a chosen channel — b\*, C\*, L\*, redness, CCT, etc. — at each position), a **variability (SD) grid** (where skies differ most across the set — usually the horizon band), a **mean elevation profile** and a **mean azimuth profile** (each with a ±SD band), and a **cluster-centroid density** map (where dominant colours tend to sit).
+
+Because your frames are usually **not perfectly registered**, two alignment controls sit beside the composite. **Vertical** normalises each image's elevation axis either *horizon→zenith* using the sky-mask extent (absorbs mount pitch/height shifts — the default) or over a *fixed range*. **Azimuth** rotates each frame to a common reference before aggregating: *none* (stationary/already-registered sets), *brightest column* (metadata-free, a sun proxy), *compass N* (from the GPS-track heading), or *sun* (solar azimuth from GPS + timestamp, for cross-time comparison). The panel reports how many images it could align. Elevation profiles are rotation-invariant, so they stay valid even with azimuth alignment off.
+
+## Projection weighting (360° / fisheye)
+
+Equirectangular and fisheye images are not equal-area — pixels over-represent the zenith/poles — so pixel-weighted metrics are biased. The **Projection / weighting** section corrects this by weighting every pixel by the solid angle it truly represents: **equirectangular** applies a cos(elevation) weight (set the crop's top/bottom elevation, e.g. 90° zenith → 0° horizon), and **fisheye** applies the matching radial weight (equidistant corrects; equisolid is already equal-area). Weighting flows through the means, medians, spread, colourfulness, warm/cool/neutral, histograms, cluster percentages, and the spatial grid; Moran's I additionally wraps horizontally for 360° continuity. Leave it on "Flat / none" for ordinary photos.
 
 ## Configuration & columns
 
