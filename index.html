@@ -85,6 +85,9 @@
     /* ── Layout ──────────────────────────────────────────────── */
     .page-body { max-width: 1180px; margin: 0 auto; padding: 1.25rem 1.5rem; }
     .cfg-sec > summary { list-style: none; }
+    .cfg-sec > summary::-webkit-details-marker { display: none; }
+    .cfg-sec > summary::before { content: '\25B6 '; font-size: 0.65rem; opacity: 0.6; }
+    .cfg-sec[open] > summary::before { content: '\25BC '; }
     .cfg-row { display: flex; gap: .9rem; align-items: center; flex-wrap: nowrap; overflow-x: auto; }
     .cfg-row label { white-space: nowrap; }
     .btn.preset-active { background: var(--primary-dark, #1a2332); color: #fff; border-color: var(--primary-dark, #1a2332); }
@@ -480,6 +483,7 @@
         <li><strong>Core settings</strong> — Analysis Precision sets the working resolution; Colour Clusters sets the k-means palette size (k-means++, fixed seed); Transparency Handling defaults to <em>Opaque pixels only</em> (composite onto white/black/grey are alternatives).</li>
         <li><strong>Columns (collapsible)</strong> — choose which <strong>colour spaces</strong> (RGB, HSV, LAB, LCH), <strong>statistics</strong> (mean, median, std dev, range, IQR), and <strong>scene metrics</strong> to export, or use the Core / Full / Minimal presets. Each row has an "all" toggle. Hue is treated circularly (mean, median, circular variance). Scene metrics: colourfulness, redness index, CCT, RMS contrast, dark-channel haze, warm/cool/neutral, hue entropy. Column names follow a consistent SPACE_CHANNEL_STAT scheme (e.g. HSV_V_mean, LAB_L_median, LCH_C_range).</li>
         <li><strong>Histogram table (collapsible)</strong> — export per-image histograms for any of hue, saturation, and value, in long format with a channel column.</li>
+        <li><strong>Projection / weighting (collapsible)</strong> — for 360° or fisheye imagery, weight metrics by true solid angle so pixel counts don't bias the result. Equirectangular applies a cos(elevation) weight (set the top/bottom elevation of your crop — e.g. 90° zenith to 0° horizon); fisheye applies the matching radial weight (equidistant corrects, equisolid is already equal-area). This de-biases means, medians, cluster percentages, histograms and colourfulness, and wraps Moran's I horizontally for 360°.</li>
         <li><strong>Spatial structure (collapsible)</strong> — an X × Y grid (with an optional lock to each image's ratio for square cells) yields row/column colour profiles, a grid/tile table, per-cluster centroid and spatial spread, and <strong>Moran's I spatial autocorrelation</strong> computed per cell on any chosen channels or metrics (L*, C*ab, saturation, value, a*, b*, R, G, B, redness, CCT, colourfulness, RMS contrast, dark-channel).</li>
         <li><strong>Visualization (collapsible)</strong> — enable per-image views and pick which to offer: Original image, Palette, Cluster-region image, Grid, Grid heatmap (coloured by a chosen channel/statistic with a legend), Row/column profile, and H/S/V histogram. Each opens from a dropdown on the result and downloads as a crisp PNG tagged at <strong>300 dpi</strong>.</li>
         <li><strong>Dataset visualizations</strong> — across the whole set: a summed hue/saturation/value histogram, an aggregate palette (all dominant colours combined, sorted by hue), and a metric-distribution view (histogram of any image-level metric or Moran's I value, with mean and median marked). Downloads as 300 dpi PNG.</li>
@@ -601,7 +605,7 @@
         <details class="cfg-sec" style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
           <summary style="cursor:pointer;font-weight:600">Histogram table</summary>
           <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem">
-            <label style="margin:0"><input type="checkbox" id="includeHistogram"> Export per-image histogram table (CSV)</label>
+            <label style="margin:0"><input type="checkbox" id="includeHistogram" onchange="toggleOpt()"> Export per-image histogram table (CSV)</label>
             <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Channels:</span>
               <label class="allbox"><input type="checkbox" id="allHistCh" onchange="toggleAll('histCh', this)" checked> all</label>
               <label><input type="checkbox" class="histCh" value="hue" checked> hue</label>
@@ -653,10 +657,36 @@
           </div>
         </details>
 
+        <details class="cfg-sec" style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
+          <summary style="cursor:pointer;font-weight:600">Projection / weighting</summary>
+          <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem">
+            <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Projection:</span>
+              <select id="projType" onchange="updateProjUI()">
+                <option value="none">Flat / none (no weighting)</option>
+                <option value="equirect">Equirectangular (cos-elevation)</option>
+                <option value="fisheye_equidistant">Fisheye — equidistant</option>
+                <option value="fisheye_equisolid">Fisheye — equisolid (equal-area)</option>
+              </select>
+              <span class="hint" style="margin:0">weights the pixel-based metrics by true solid angle; wraps Moran's I horizontally for 360°</span>
+            </div>
+            <div class="cfg-row" id="projEquirect" style="display:none">
+              <span class="hint" style="margin:0;min-width:96px">Elevation °:</span>
+              <label style="margin:0">top <input type="number" id="projTop" value="90" min="-90" max="90" step="1" style="width:60px"></label>
+              <label style="margin:0">bottom <input type="number" id="projBottom" value="0" min="-90" max="90" step="1" style="width:60px"></label>
+              <span class="hint" style="margin:0">top row = zenith (90), bottom = horizon (0); full sphere = 90 to −90</span>
+            </div>
+            <div class="cfg-row" id="projFisheye" style="display:none">
+              <span class="hint" style="margin:0;min-width:96px">Field of view °:</span>
+              <input type="number" id="projFov" value="180" min="30" max="360" step="1" style="width:60px">
+              <span class="hint" style="margin:0">circle assumed centred, radius = min(width, height) / 2</span>
+            </div>
+          </div>
+        </details>
+
         <details class="cfg-sec" open style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem">
           <summary style="cursor:pointer;font-weight:600">Visualization</summary>
           <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem">
-            <label><input type="checkbox" id="includeViz" checked> Enable per-image visualizations</label>
+            <label><input type="checkbox" id="includeViz" checked onchange="toggleOpt()"> Enable per-image visualizations</label>
             <div class="cfg-row"><span class="hint" style="margin:0;min-width:96px">Views:</span>
               <label class="allbox"><input type="checkbox" id="allVizType" onchange="toggleAll('vizType', this)" checked> all</label>
               <label><input type="checkbox" class="vizType" value="original" checked> Original</label>
@@ -880,10 +910,49 @@ function circMedian(anglesDeg, meanDeg) {
   return mm;
 }
 
-function imageMetrics(pixels) {
+// Weighted mean / median / std / iqr / range of a 1-D array
+function wstats(vals, wts) {
+  const n = vals.length; if (!n) return { mean: null, median: null, std: null, iqr: null, range: null };
+  const idx = Array.from({ length: n }, (_, i) => i).sort((a, b) => vals[a] - vals[b]);
+  let tw = 0, sw = 0, sw2 = 0;
+  for (let i = 0; i < n; i++) { const w = wts ? wts[i] : 1; tw += w; sw += w * vals[i]; sw2 += w * vals[i] * vals[i]; }
+  const mean = tw > 0 ? sw / tw : 0, std = Math.sqrt(Math.max(0, sw2 / tw - mean * mean));
+  const wq = p => { let acc = 0; const t = p * tw; for (let k = 0; k < n; k++) { const i = idx[k]; acc += wts ? wts[i] : 1; if (acc >= t) return vals[i]; } return vals[idx[n - 1]]; };
+  return { mean, median: wq(0.5), std, iqr: wq(0.75) - wq(0.25), range: vals[idx[n - 1]] - vals[idx[0]] };
+}
+function circMedianW(anglesDeg, wts, meanDeg) {
+  if (!anglesDeg.length || meanDeg == null) return null;
+  const sh = anglesDeg.map(x => ((x - meanDeg + 540) % 360) - 180);
+  const idx = Array.from({ length: sh.length }, (_, i) => i).sort((a, b) => sh[a] - sh[b]);
+  let tw = 0; for (let i = 0; i < sh.length; i++) tw += wts ? wts[i] : 1;
+  let acc = 0, med = sh[idx[idx.length - 1]];
+  for (const i of idx) { acc += wts ? wts[i] : 1; if (acc >= tw * 0.5) { med = sh[i]; break; } }
+  let mm = (meanDeg + med) % 360; if (mm < 0) mm += 360; return mm;
+}
+// Per-pixel solid-angle weight for a projection (equirectangular / fisheye); 1 for flat/none
+function pixelWeight(x, y, W, H, proj) {
+  if (!proj || proj.type === 'none') return 1;
+  if (proj.type === 'equirect') {
+    const elev = (proj.top + (proj.bottom - proj.top) * (H > 1 ? y / (H - 1) : 0)) * Math.PI / 180;
+    return Math.max(0, Math.cos(elev));
+  }
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 || 1, rr = Math.hypot(x - cx, y - cy) / R;
+  if (rr > 1) return 0;
+  if (proj.type === 'fisheye_equisolid') return 1;                 // already ~equal-area
+  const theta = rr * ((proj.fov || 180) / 2) * Math.PI / 180;      // equidistant fisheye
+  return theta < 1e-6 ? 1 : Math.sin(theta) / theta;
+}
+function computeWeights(coords, W, H, n, proj) {
+  if (!proj || proj.type === 'none') return null;
+  const wts = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = coords ? coords[i * 2] : (i % W), y = coords ? coords[i * 2 + 1] : Math.floor(i / W); wts[i] = pixelWeight(x, y, W, H, proj); }
+  return wts;
+}
+
+function imageMetrics(pixels, weights) {
   const n = pixels.length / 3;
   if (n === 0) return null;
-
+  let totalW = 0;
   let sumR = 0, sumG = 0, sumB = 0;
   let sumSin = 0, sumCos = 0, hueN = 0;
   let sumS = 0, sumV = 0;
@@ -896,49 +965,49 @@ function imageMetrics(pixels) {
   const arrL = new Float32Array(n), arrC = new Float32Array(n);
   const arrR = new Float32Array(n), arrG = new Float32Array(n), arrB = new Float32Array(n);
   const arrA = new Float32Array(n), arrBl = new Float32Array(n);
-  const arrHueCh = [], arrHlchCh = [];
+  const arrHueCh = [], arrHlchCh = [], arrHueChW = [], arrHlchChW = [];
   const hueBins = new Float64Array(36);
   const satBins = new Float64Array(20);
   const valBins = new Float64Array(20);
   let hueBinN = 0;
 
   for (let i = 0; i < n; i++) {
+    const wt = weights ? weights[i] : 1; totalW += wt;
     const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
-    sumR += r; sumG += g; sumB += b;
+    sumR += wt * r; sumG += wt * g; sumB += wt * b;
 
     const [h, s, v] = rgbToHsv(r, g, b);
-    sumS += s; sumV += v;
+    sumS += wt * s; sumV += wt * v;
     const [Lp, Ap, Bp] = rgbToLab(r, g, b);
     const Cp = Math.sqrt(Ap * Ap + Bp * Bp);
-    sumL += Lp; sumC += Cp; sumA += Ap; sumBlab += Bp;
+    sumL += wt * Lp; sumC += wt * Cp; sumA += wt * Ap; sumBlab += wt * Bp;
     arrS[i] = s; arrV[i] = v; arrL[i] = Lp; arrC[i] = Cp;
     arrR[i] = r; arrG[i] = g; arrB[i] = b; arrA[i] = Ap; arrBl[i] = Bp;
     const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b;   // Rec.709 luminance
-    sumY += Y; sumY2 += Y * Y;
-    sumDark += Math.min(r, g, b);                      // dark-channel (per-pixel)
-    satBins[Math.min(19, Math.floor(s / 5))]++;
-    valBins[Math.min(19, Math.floor(v / 5))]++;
+    sumY += wt * Y; sumY2 += wt * Y * Y;
+    sumDark += wt * Math.min(r, g, b);                 // dark-channel (per-pixel)
+    satBins[Math.min(19, Math.floor(s / 5))] += wt;
+    valBins[Math.min(19, Math.floor(v / 5))] += wt;
 
     // Circular hue statistics + warm/cool (chromatic pixels only)
     if (s >= 10 && v >= 10) {
       const rad = h * Math.PI / 180;
-      sumSin += Math.sin(rad); sumCos += Math.cos(rad); hueN++;
-      if (h < 90 || h >= 330) warm++; else cool++;
-      hueBins[Math.min(35, Math.floor(h / 10))]++;
-      hueBinN++;
-      arrHueCh.push(h);
+      sumSin += wt * Math.sin(rad); sumCos += wt * Math.cos(rad); hueN += wt;
+      if (h < 90 || h >= 330) warm += wt; else cool += wt;
+      hueBins[Math.min(35, Math.floor(h / 10))] += wt;
+      hueBinN += wt;
+      arrHueCh.push(h); arrHueChW.push(wt);
       let lchH = Math.atan2(Bp, Ap) * 180 / Math.PI; if (lchH < 0) lchH += 360;
-      sumSinL += Math.sin(lchH * Math.PI / 180); sumCosL += Math.cos(lchH * Math.PI / 180); hueLN++;
-      arrHlchCh.push(lchH);
+      sumSinL += wt * Math.sin(lchH * Math.PI / 180); sumCosL += wt * Math.cos(lchH * Math.PI / 180); hueLN += wt;
+      arrHlchCh.push(lchH); arrHlchChW.push(wt);
     } else {
-      neutral++;
+      neutral += wt;
     }
 
     // Hasler–Süsstrunk colourfulness components
-    const rg = r - g;
-    const yb = 0.5 * (r + g) - b;
-    sumRg += rg; sumYb += yb;
-    sumRg2 += rg * rg; sumYb2 += yb * yb;
+    const rg = r - g, yb = 0.5 * (r + g) - b;
+    sumRg += wt * rg; sumYb += wt * yb;
+    sumRg2 += wt * rg * rg; sumYb2 += wt * yb * yb;
   }
 
   // Circular mean hue
@@ -950,9 +1019,9 @@ function imageMetrics(pixels) {
   }
 
   // Colourfulness M = sqrt(var_rg + var_yb) + 0.3 * sqrt(mean_rg² + mean_yb²)
-  const mRg = sumRg / n, mYb = sumYb / n;
-  const vRg = Math.max(0, sumRg2 / n - mRg * mRg);
-  const vYb = Math.max(0, sumYb2 / n - mYb * mYb);
+  const mRg = sumRg / totalW, mYb = sumYb / totalW;
+  const vRg = Math.max(0, sumRg2 / totalW - mRg * mRg);
+  const vYb = Math.max(0, sumYb2 / totalW - mYb * mYb);
   const colourfulness = Math.round((Math.sqrt(vRg + vYb) + 0.3 * Math.sqrt(mRg * mRg + mYb * mYb)) * 100) / 100;
 
   // Hue entropy (normalised 0–1 over 36 bins)
@@ -968,13 +1037,13 @@ function imageMetrics(pixels) {
     entropy = Math.round((e / Math.log2(36)) * 1000) / 1000;
   }
 
-  // Perceptual central tendency + spread; medians resist sun/obstruction outliers
-  const sS = stats1d(arrS), sV = stats1d(arrV), sL = stats1d(arrL), sC = stats1d(arrC);
-  const sR = stats1d(arrR), sG = stats1d(arrG), sB = stats1d(arrB), sA = stats1d(arrA), sBl = stats1d(arrBl);
-  const medHue = circMedian(arrHueCh, meanHue);
+  // Perceptual central tendency + spread (weighted); medians resist sun/obstruction outliers
+  const sS = wstats(arrS, weights), sV = wstats(arrV, weights), sL = wstats(arrL, weights), sC = wstats(arrC, weights);
+  const sR = wstats(arrR, weights), sG = wstats(arrG, weights), sB = wstats(arrB, weights), sA = wstats(arrA, weights), sBl = wstats(arrBl, weights);
+  const medHue = circMedianW(arrHueCh, arrHueChW, meanHue);
   let meanLchH = null;
   if (hueLN > 0) { meanLchH = Math.atan2(sumSinL / hueLN, sumCosL / hueLN) * 180 / Math.PI; if (meanLchH < 0) meanLchH += 360; }
-  const medLchH = circMedian(arrHlchCh, meanLchH);
+  const medLchH = circMedianW(arrHlchCh, arrHlchChW, meanLchH);
   const R = hueN > 0 ? Math.sqrt(sumSin * sumSin + sumCos * sumCos) / hueN : 0;
   const hueCircVar = hueN > 0 ? Math.round((1 - R) * 1000) / 1000 : null;
   const r1 = x => x == null ? null : Math.round(x * 10) / 10;
@@ -983,41 +1052,41 @@ function imageMetrics(pixels) {
 
   // Structured per-channel statistics (mean/median/std/range/iqr; hue is circular)
   const chStats = {
-    RGB_R: { mean: Math.round(sumR / n), median: Math.round(sR.median), std: r2(sR.std), range: Math.round(sR.range), iqr: Math.round(sR.iqr) },
-    RGB_G: { mean: Math.round(sumG / n), median: Math.round(sG.median), std: r2(sG.std), range: Math.round(sG.range), iqr: Math.round(sG.iqr) },
-    RGB_B: { mean: Math.round(sumB / n), median: Math.round(sB.median), std: r2(sB.std), range: Math.round(sB.range), iqr: Math.round(sB.iqr) },
+    RGB_R: { mean: Math.round(sR.mean), median: Math.round(sR.median), std: r2(sR.std), range: Math.round(sR.range), iqr: Math.round(sR.iqr) },
+    RGB_G: { mean: Math.round(sG.mean), median: Math.round(sG.median), std: r2(sG.std), range: Math.round(sG.range), iqr: Math.round(sG.iqr) },
+    RGB_B: { mean: Math.round(sB.mean), median: Math.round(sB.median), std: r2(sB.std), range: Math.round(sB.range), iqr: Math.round(sB.iqr) },
     HSV_H: { mean: meanHue, median: r1(medHue), circvar: hueCircVar },
-    HSV_S: { mean: r1(sumS / n), median: r1(sS.median), std: r1(sS.std), range: r1(sS.range), iqr: r1(sS.iqr) },
-    HSV_V: { mean: r1(sumV / n), median: r1(sV.median), std: r1(sV.std), range: r1(sV.range), iqr: r1(sV.iqr) },
-    LAB_L: { mean: r2(sumL / n), median: r2(sL.median), std: r2(sL.std), range: r2(sL.range), iqr: r2(sL.iqr) },
-    LAB_A: { mean: r2(sumA / n), median: r2(sA.median), std: r2(sA.std), range: r2(sA.range), iqr: r2(sA.iqr) },
-    LAB_B: { mean: r2(sumBlab / n), median: r2(sBl.median), std: r2(sBl.std), range: r2(sBl.range), iqr: r2(sBl.iqr) },
-    LCH_L: { mean: r2(sumL / n), median: r2(sL.median), std: r2(sL.std), range: r2(sL.range), iqr: r2(sL.iqr) },
-    LCH_C: { mean: r2(sumC / n), median: r2(sC.median), std: r2(sC.std), range: r2(sC.range), iqr: r2(sC.iqr) },
+    HSV_S: { mean: r1(sS.mean), median: r1(sS.median), std: r1(sS.std), range: r1(sS.range), iqr: r1(sS.iqr) },
+    HSV_V: { mean: r1(sV.mean), median: r1(sV.median), std: r1(sV.std), range: r1(sV.range), iqr: r1(sV.iqr) },
+    LAB_L: { mean: r2(sL.mean), median: r2(sL.median), std: r2(sL.std), range: r2(sL.range), iqr: r2(sL.iqr) },
+    LAB_A: { mean: r2(sA.mean), median: r2(sA.median), std: r2(sA.std), range: r2(sA.range), iqr: r2(sA.iqr) },
+    LAB_B: { mean: r2(sBl.mean), median: r2(sBl.median), std: r2(sBl.std), range: r2(sBl.range), iqr: r2(sBl.iqr) },
+    LCH_L: { mean: r2(sL.mean), median: r2(sL.median), std: r2(sL.std), range: r2(sL.range), iqr: r2(sL.iqr) },
+    LCH_C: { mean: r2(sC.mean), median: r2(sC.median), std: r2(sC.std), range: r2(sC.range), iqr: r2(sC.iqr) },
     LCH_H: { mean: r1(meanLchH), median: r1(medLchH) },
   };
 
-  // New scene descriptors
-  const meanR = sumR / n, meanG = sumG / n, meanB = sumB / n;
+  // New scene descriptors (weighted)
+  const meanR = sR.mean, meanG = sG.mean, meanB = sB.mean;
   const redness = (meanR + meanB) > 0 ? r3((meanR - meanB) / (meanR + meanB)) : 0;
-  const meanY = sumY / n, varY = Math.max(0, sumY2 / n - meanY * meanY);
+  const meanY = sumY / totalW, varY = Math.max(0, sumY2 / totalW - meanY * meanY);
   const rms_contrast = meanY > 0 ? r3(Math.sqrt(varY) / meanY) : 0;
-  const dark_channel = r3((sumDark / n) / 255);
+  const dark_channel = r3((sumDark / totalW) / 255);
   const cct = rgbToCCT(meanR, meanG, meanB);
 
-  const pct = x => Math.round((x / n) * 1000) / 10;
+  const pct = x => Math.round((x / totalW) * 1000) / 10;
   return {
-    mean_r: Math.round(sumR / n), mean_g: Math.round(sumG / n), mean_b: Math.round(sumB / n),
+    mean_r: Math.round(sR.mean), mean_g: Math.round(sG.mean), mean_b: Math.round(sB.mean),
     median_r: Math.round(sR.median), median_g: Math.round(sG.median), median_b: Math.round(sB.median),
     mean_hue: meanHue, median_hue: r1(medHue),
-    mean_saturation: Math.round((sumS / n) * 10) / 10,
+    mean_saturation: r1(sS.mean),
     median_saturation: r1(sS.median), saturation_std: r1(sS.std), saturation_iqr: r1(sS.iqr),
-    mean_value: Math.round((sumV / n) * 10) / 10,
+    mean_value: r1(sV.mean),
     median_value: r1(sV.median),
-    mean_lightness: r2(sumL / n), median_lightness: r2(sL.median),
-    mean_lab_a: r2(sumA / n), median_lab_a: r2(sA.median),
-    mean_lab_b: r2(sumBlab / n), median_lab_b: r2(sBl.median),
-    mean_chroma: r2(sumC / n), median_chroma: r2(sC.median),
+    mean_lightness: r2(sL.mean), median_lightness: r2(sL.median),
+    mean_lab_a: r2(sA.mean), median_lab_a: r2(sA.median),
+    mean_lab_b: r2(sBl.mean), median_lab_b: r2(sBl.median),
+    mean_chroma: r2(sC.mean), median_chroma: r2(sC.median),
     chroma_std: r2(sC.std), chroma_iqr: r2(sC.iqr),
     mean_lch_h: r1(meanLchH), median_lch_h: r1(medLchH),
     colourfulness,
@@ -1161,14 +1230,15 @@ function parseExif(buffer) {
 }
 
 // ── Spatial structure (row/col profiles, grid, cluster centroids, Moran's I) ──
-function moransI(field, GX, GY) {
+function moransI(field, GX, GY, wrapX) {
   const valid = []; for (let ci = 0; ci < GX * GY; ci++) if (!isNaN(field[ci])) valid.push(ci);
   if (valid.length <= 2) return null;
   let mean = 0; for (const ci of valid) mean += field[ci]; mean /= valid.length;
   let num = 0, den = 0, W = 0;
   for (const ci of valid) { const d = field[ci] - mean; den += d * d; }
   for (const ci of valid) { const gx = ci % GX, gy = (ci / GX) | 0, di = field[ci] - mean;
-    for (const [nx, ny] of [[gx - 1, gy], [gx + 1, gy], [gx, gy - 1], [gx, gy + 1]]) {
+    for (let [nx, ny] of [[gx - 1, gy], [gx + 1, gy], [gx, gy - 1], [gx, gy + 1]]) {
+      if (wrapX) { if (nx < 0) nx = GX - 1; else if (nx >= GX) nx = 0; }   // 360° horizontal continuity
       if (nx < 0 || ny < 0 || nx >= GX || ny >= GY) continue; const nj = ny * GX + nx;
       if (isNaN(field[nj])) continue; num += di * (field[nj] - mean); W++; } }
   return (den > 0 && W > 0) ? Math.round((valid.length / W) * (num / den) * 1000) / 1000 : null;
@@ -1177,7 +1247,7 @@ function cellChanVal(o, ch) {
   return ({ R: o.mean_r, G: o.mean_g, B: o.mean_b, S: o.saturation, V: o.value, L: o.lightness, a: o.lab_a, b: o.lab_b, C: o.chroma,
     red: o.redness, cct: o.cct, colf: o.colf, rms: o.rms, dark: o.dark })[ch];
 }
-function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels) {
+function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels, weights, wrapX) {
   const GX = Math.max(1, gridX | 0), GY = Math.max(1, gridY | 0);
   const chans = (channels && channels.length) ? channels : ['L'];
   const px = i => coords ? coords[i * 2] : (i % w);
@@ -1193,22 +1263,24 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
   const kX = new Float64Array(K), kY = new Float64Array(K), kX2 = new Float64Array(K), kY2 = new Float64Array(K), kN = new Float64Array(K);
 
   for (let i = 0; i < nAnalyzed; i++) {
+    const wt = weights ? weights[i] : 1;
     const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
     const x = px(i), y = py(i);
-    if (y >= 0 && y < h) { rowN[y]++; rowR[y] += r; rowG[y] += g; rowB[y] += b; }
-    if (x >= 0 && x < w) { colN[x]++; colR[x] += r; colG[x] += g; colB[x] += b; }
+    if (y >= 0 && y < h) { rowN[y] += wt; rowR[y] += wt * r; rowG[y] += wt * g; rowB[y] += wt * b; }
+    if (x >= 0 && x < w) { colN[x] += wt; colR[x] += wt * r; colG[x] += wt * g; colB[x] += wt * b; }
     const gx = Math.min(GX - 1, Math.floor(x / w * GX)), gy = Math.min(GY - 1, Math.floor(y / h * GY));
-    const ci = gy * GX + gx; cN[ci]++; cR[ci] += r; cG[ci] += g; cB[ci] += b;
-    const rg = r - g, yb = 0.5 * (r + g) - b; cRg[ci] += rg; cYb[ci] += yb; cRg2[ci] += rg * rg; cYb2[ci] += yb * yb;
-    const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b; cY[ci] += Y; cY2[ci] += Y * Y; cDark[ci] += Math.min(r, g, b);
-    if (kmLabels) { const rank = kmRank[kmLabels[i]]; if (rank != null) { kX[rank] += x; kY[rank] += y; kX2[rank] += x * x; kY2[rank] += y * y; kN[rank]++; } }
+    const ci = gy * GX + gx; cN[ci] += wt; cR[ci] += wt * r; cG[ci] += wt * g; cB[ci] += wt * b;
+    const rg = r - g, yb = 0.5 * (r + g) - b; cRg[ci] += wt * rg; cYb[ci] += wt * yb; cRg2[ci] += wt * rg * rg; cYb2[ci] += wt * yb * yb;
+    const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b; cY[ci] += wt * Y; cY2[ci] += wt * Y * Y; cDark[ci] += wt * Math.min(r, g, b);
+    if (kmLabels) { const rank = kmRank[kmLabels[i]]; if (rank != null) { kX[rank] += wt * x; kY[rank] += wt * y; kX2[rank] += wt * x * x; kY2[rank] += wt * y * y; kN[rank] += wt; } }
   }
 
   const derive = (mr, mg, mb) => {
     const [hh, ss, vv] = rgbToHsv(mr, mg, mb);
     const [L, A, Bb] = rgbToLab(mr, mg, mb);
-    const [C] = labToLch(L, A, Bb);
-    return { mean_r: Math.round(mr), mean_g: Math.round(mg), mean_b: Math.round(mb), hue: hh, saturation: ss, value: vv, lightness: L, chroma: C, lab_a: A, lab_b: Bb };
+    const [C, Hh] = labToLch(L, A, Bb);
+    return { hex: rgbToHex(Math.round(mr), Math.round(mg), Math.round(mb)), mean_r: Math.round(mr), mean_g: Math.round(mg), mean_b: Math.round(mb),
+      hue: hh, saturation: ss, value: vv, lightness: L, chroma: C, lab_a: A, lab_b: Bb, lch_h: Hh };
   };
   const profile = (N, R, Gc, B) => { const out = [];
     for (let k = 0; k < N.length; k++) { if (!N[k]) continue; const o = derive(R[k] / N[k], Gc[k] / N[k], B[k] / N[k]); o.index = k; o.n = N[k]; out.push(o); } return out; };
@@ -1232,7 +1304,7 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
   for (const ch of chans) {
     const field = new Float64Array(NC).fill(NaN);
     for (let ci = 0; ci < NC; ci++) if (cellObj[ci]) field[ci] = cellChanVal(cellObj[ci], ch);
-    morans[ch] = moransI(field, GX, GY);
+    morans[ch] = moransI(field, GX, GY, wrapX);
   }
 
   const diag = Math.sqrt(w * w + h * h);
@@ -1250,7 +1322,7 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
 // rgba: Uint8ClampedArray (RGBA), w/h at analysis resolution
 function analyzePixels(rgba, w, h, opts) {
   const { numClusters, transparencyBg, includePixel, includeLab = true, pixelStep = 1,
-          includeSpatial = false, gridX = 8, gridY = 8, lockRatio = false, moranChannels = ['L'] } = opts;
+          includeSpatial = false, gridX = 8, gridY = 8, lockRatio = false, moranChannels = ['L'], projection = null } = opts;
   const bgColors = { white: [255, 255, 255], black: [0, 0, 0], gray: [128, 128, 128] };
 
   const nAll = w * h;
@@ -1301,10 +1373,15 @@ function analyzePixels(rgba, w, h, opts) {
   const nAnalyzed = pixels.length / 3;
   if (nAnalyzed === 0) return { error: 'No opaque pixels found in transparent image' };
 
+  // Solid-angle weights for the chosen projection (null = flat/none)
+  const projWeights = computeWeights(coords, w, h, nAnalyzed, projection);
+  let wtot = nAnalyzed, wcounts = null;
+
   // K-means clusters
   let clusters = [], km = null;
   if (numClusters >= 2) {
     km = kmeans(pixels, numClusters, 42);
+    if (projWeights) { wcounts = new Float64Array(km.k); wtot = 0; for (let i = 0; i < nAnalyzed; i++) { wcounts[km.labels[i]] += projWeights[i]; wtot += projWeights[i]; } }
     const order = Array.from({ length: km.k }, (_, i) => i)
       .sort((a, b) => km.counts[b] - km.counts[a]);
     clusters = order.map((c, rank) => {
@@ -1319,14 +1396,15 @@ function analyzePixels(rgba, w, h, opts) {
         red: Math.round(r), green: Math.round(g), blue: Math.round(b),
         hue: hh, saturation: ss, value: vv,
         lab_l: L, lab_a: A, lab_b: B, lch_c: C, lch_h: H,
-        percentage: Math.round((km.counts[c] / nAnalyzed) * 10000) / 100,
+        percentage: Math.round(((wcounts ? wcounts[c] : km.counts[c]) / wtot) * 10000) / 100,
         pixel_count: km.counts[c],
+        weighted_count: wcounts ? wcounts[c] : km.counts[c],
       };
     });
   }
 
-  // Whole-image metrics
-  const metrics = imageMetrics(pixels);
+  // Whole-image metrics (projection-weighted when a projection is set)
+  const metrics = imageMetrics(pixels, projWeights);
   metrics.analyzed_pixels = nAnalyzed;
   metrics.opaque_pct = hasAlpha ? Math.round((opaqueCount / nAll) * 1000) / 10 : 100;
   metrics.has_alpha = hasAlpha;
@@ -1363,7 +1441,7 @@ function analyzePixels(rgba, w, h, opts) {
   let spatial = null;
   if (includeSpatial) {
     const gyEff = lockRatio ? Math.max(1, Math.round(gridX * h / w)) : gridY;   // square cells when locked to image ratio
-    spatial = computeSpatial(pixels, coords, w, h, km ? km.labels : null, clusters, gridX, gyEff, nAnalyzed, moranChannels);
+    spatial = computeSpatial(pixels, coords, w, h, km ? km.labels : null, clusters, gridX, gyEff, nAnalyzed, moranChannels, projWeights, !!(projection && projection.type === 'equirect'));
     metrics.morans = spatial.morans;
     metrics.morans_channels = spatial.morans_channels;
   }
@@ -1558,6 +1636,7 @@ async function analyzeImages() {
     gridY:          Math.max(1, parseInt(document.getElementById('gridY').value, 10) || 8),
     lockRatio:      document.getElementById('lockRatio').checked,
     moranChannels:  Array.from(document.querySelectorAll('.moranCh:checked')).map(c => c.value),
+    projection:     readProjection(),
     includeViz:     document.getElementById('includeViz').checked,
     vizTypes:       Array.from(document.querySelectorAll('.vizType:checked')).map(c => c.value),
   };
@@ -1825,7 +1904,7 @@ function aggregatePalette() {
   const agg = {};
   for (const r of (window._results || [])) for (const c of (r.clusters || [])) {
     const q = ((c.red >> 3) << 3) + ',' + ((c.green >> 3) << 3) + ',' + ((c.blue >> 3) << 3);
-    agg[q] = (agg[q] || 0) + c.pixel_count;
+    agg[q] = (agg[q] || 0) + (c.weighted_count != null ? c.weighted_count : c.pixel_count);
   }
   const items = Object.keys(agg).map(k => ({ rgb: k.split(',').map(Number), w: agg[k] }));
   items.sort((a, b) => rgbToHsv(a.rgb[0], a.rgb[1], a.rgb[2])[0] - rgbToHsv(b.rgb[0], b.rgb[1], b.rgb[2])[0]);
@@ -2104,10 +2183,12 @@ function drawVizPalette(ctx, W, H, r) {
   ctx.fillText('Palette — dominant colours by pixel share', 8, 14);
   if (!cs.length) { ctx.fillStyle = '#999'; ctx.font = '12px sans-serif'; ctx.fillText('No clusters', 10, 34); return; }
   const mL = 8, mR = 8, mT = 20, mB = 26, plotW = W - mL - mR, plotH = H - mT - mB;
-  const total = cs.reduce((a, c) => a + c.pixel_count, 0) || 1; let x = mL;
-  cs.forEach(c => { const w = (c.pixel_count / total) * plotW; ctx.fillStyle = c.hex; ctx.fillRect(x, mT, Math.max(0, w), plotH); x += w; });
-  ctx.strokeStyle = '#dde8ed'; ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
-  for (let p = 0; p <= 100; p += 25) { const px = mL + (p / 100) * plotW; ctx.beginPath(); ctx.moveTo(px, mT + plotH); ctx.lineTo(px, mT + plotH + 4); ctx.stroke(); ctx.fillText(p + '% of pixels', px, mT + plotH + 15); }
+  const total = cs.reduce((a, c) => a + (c.weighted_count != null ? c.weighted_count : c.pixel_count), 0) || 1; let x = mL;
+  cs.forEach(c => {
+    const w = ((c.weighted_count != null ? c.weighted_count : c.pixel_count) / total) * plotW; ctx.fillStyle = c.hex; ctx.fillRect(x, mT, Math.max(0, w), plotH);
+    if (w > 16) { ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(c.percentage.toFixed(0) + '%', x + w / 2, mT + plotH + 14); }
+    x += w;
+  });
   ctx.textAlign = 'left';
 }
 function drawVizImageData(ctx, W, H, q) {
@@ -2226,6 +2307,13 @@ function toggleOpt() {
   if (gy) { gy.disabled = !on || locked; gy.style.display = locked ? 'none' : ''; }
   const note = document.getElementById('gridYnote'); if (note) note.style.display = locked ? '' : 'none';
   document.querySelectorAll('.moranCh').forEach(c => c.disabled = !on);
+  const am = document.getElementById('allMoranCh'); if (am) am.disabled = !on;
+  const hist = document.getElementById('includeHistogram'), histOn = !!(hist && hist.checked);
+  document.querySelectorAll('.histCh').forEach(c => c.disabled = !histOn);
+  const ah = document.getElementById('allHistCh'); if (ah) ah.disabled = !histOn;
+  const viz = document.getElementById('includeViz'), vizOn = !!(viz && viz.checked);
+  document.querySelectorAll('.vizType').forEach(c => c.disabled = !vizOn);
+  const av = document.getElementById('allVizType'); if (av) av.disabled = !vizOn;
 }
 window.addEventListener('DOMContentLoaded', toggleOpt);
 
@@ -2239,6 +2327,19 @@ function syncAllBoxes() {
 }
 function clearPreset() { document.querySelectorAll('.btn.preset-active').forEach(b => b.classList.remove('preset-active')); }
 function labSelected() { return Array.from(document.querySelectorAll('.colSpace:checked')).some(c => c.value === 'LAB' || c.value === 'LCH'); }
+function readProjection() {
+  const t = (document.getElementById('projType') || {}).value || 'none';
+  if (t === 'equirect') return { type: 'equirect', top: parseFloat(document.getElementById('projTop').value) || 90, bottom: parseFloat(document.getElementById('projBottom').value) || 0 };
+  if (t === 'fisheye_equidistant' || t === 'fisheye_equisolid') return { type: t, fov: parseFloat(document.getElementById('projFov').value) || 180 };
+  return { type: 'none' };
+}
+function updateProjUI() {
+  const t = (document.getElementById('projType') || {}).value;
+  const eq = document.getElementById('projEquirect'), fe = document.getElementById('projFisheye');
+  if (eq) eq.style.display = t === 'equirect' ? '' : 'none';
+  if (fe) fe.style.display = (t === 'fisheye_equidistant' || t === 'fisheye_equisolid') ? '' : 'none';
+}
+window.addEventListener('DOMContentLoaded', updateProjUI);
 function applyPreset(name, btn) {
   const set = (cls, vals) => document.querySelectorAll('.' + cls).forEach(c => c.checked = vals.includes(c.value));
   if (name === 'full') {
@@ -2394,26 +2495,28 @@ function downloadPixelCSV() {
 }
 
 function downloadProfilesCSV() {
-  const header = ['image_id', 'filename', 'axis', 'index', 'n',
-    'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'HSV_H_mean', 'HSV_S_mean', 'HSV_V_mean', 'LAB_L_mean', 'LCH_C_mean'];
+  const header = ['image_id', 'filename', 'axis', 'index', 'n', 'hex',
+    'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'HSV_H_mean', 'HSV_S_mean', 'HSV_V_mean',
+    'LAB_L_mean', 'LAB_A_mean', 'LAB_B_mean', 'LCH_L_mean', 'LCH_C_mean', 'LCH_H_mean'];
+  const row = (r, axis, o) => [r.id, r.filename, axis, o.index, o.n, o.hex, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.lab_a, o.lab_b, o.lightness, o.chroma, o.lch_h];
   const rows = [];
   for (const r of window._results) {
     if (!r.spatial) continue;
-    for (const o of r.spatial.rows) rows.push([r.id, r.filename, 'row', o.index, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.chroma]);
-    for (const o of r.spatial.cols) rows.push([r.id, r.filename, 'col', o.index, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.chroma]);
+    for (const o of r.spatial.rows) rows.push(row(r, 'row', o));
+    for (const o of r.spatial.cols) rows.push(row(r, 'col', o));
   }
   if (!rows.length) { setStatus('No spatial data — enable "Spatial structure" before analyzing.', 'warning'); return; }
   downloadCSVText(buildCSV(header, rows), `colour_profiles_${todayStamp()}.csv`);
 }
 
 function downloadGridCSV() {
-  const header = ['image_id', 'filename', 'grid_x', 'grid_y', 'cell_x', 'cell_y', 'n',
+  const header = ['image_id', 'filename', 'grid_x', 'grid_y', 'cell_x', 'cell_y', 'n', 'hex',
     'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'HSV_H_mean', 'HSV_S_mean', 'HSV_V_mean',
-    'LAB_L_mean', 'LAB_A_mean', 'LAB_B_mean', 'LCH_C_mean'];
+    'LAB_L_mean', 'LAB_A_mean', 'LAB_B_mean', 'LCH_L_mean', 'LCH_C_mean', 'LCH_H_mean'];
   const rows = [];
   for (const r of window._results) {
     if (!r.spatial) continue;
-    for (const o of r.spatial.grid) rows.push([r.id, r.filename, r.spatial.gridX, r.spatial.gridY, o.cell_x, o.cell_y, o.n, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.lab_a, o.lab_b, o.chroma]);
+    for (const o of r.spatial.grid) rows.push([r.id, r.filename, r.spatial.gridX, r.spatial.gridY, o.cell_x, o.cell_y, o.n, o.hex, o.mean_r, o.mean_g, o.mean_b, o.hue, o.saturation, o.value, o.lightness, o.lab_a, o.lab_b, o.lightness, o.chroma, o.lch_h]);
   }
   if (!rows.length) { setStatus('No spatial data — enable "Spatial structure" before analyzing.', 'warning'); return; }
   downloadCSVText(buildCSV(header, rows), `colour_grid_${todayStamp()}.csv`);
