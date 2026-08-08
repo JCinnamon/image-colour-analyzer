@@ -486,7 +486,7 @@
         <li><strong>Projection / weighting (collapsible)</strong> — for 360° or fisheye imagery, weight metrics by true solid angle so pixel counts don't bias the result. Equirectangular applies a cos(elevation) weight (set the top/bottom elevation of your crop — e.g. 90° zenith to 0° horizon); fisheye applies the matching radial weight (equidistant corrects, equisolid is already equal-area). This de-biases means, medians, cluster percentages, histograms and colourfulness, and wraps Moran's I horizontally for 360°.</li>
         <li><strong>Spatial structure (collapsible)</strong> — an X × Y grid (with an optional lock to each image's ratio for square cells) yields row/column colour profiles, a grid/tile table, per-cluster centroid and spatial spread, and <strong>Moran's I spatial autocorrelation</strong> computed per cell on any chosen channels or metrics (L*, C*ab, saturation, value, a*, b*, R, G, B, redness, CCT, colourfulness, RMS contrast, dark-channel).</li>
         <li><strong>Visualization (collapsible)</strong> — enable per-image views and pick which to offer: Original image, Palette, Cluster-region image, Grid, Grid heatmap (coloured by a chosen channel/statistic with a legend), Row/column profile, and H/S/V histogram. Each opens from a dropdown on the result and downloads as a crisp PNG tagged at <strong>300 dpi</strong>.</li>
-        <li><strong>Dataset visualizations</strong> — across the whole set: a summed hue/saturation/value histogram, an aggregate palette (all dominant colours combined, sorted by hue), and a metric-distribution view (histogram of any image-level metric or Moran's I value, with mean and median marked). Downloads as 300 dpi PNG.</li>
+        <li><strong>Dataset visualizations</strong> — across the whole set: a summed hue/saturation/value histogram, an aggregate palette (all dominant colours combined, sorted by hue), and a metric-distribution view (histogram of any image-level metric or Moran's I value, with mean and median marked). With Spatial structure on, also <strong>dataset spatial composites</strong> — a mean composite grid, a variability (SD) grid, mean elevation and azimuth profiles, and a cluster-centroid density map — with vertical (horizon→zenith / fixed) and azimuth (none / brightest column / compass N / sun) registration for frames that aren't perfectly aligned. Downloads as 300 dpi PNG.</li>
         <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, histogram, and spatial (profiles, grid) tables, each downloadable as CSV. Everything runs locally; nothing is uploaded.</li>
       </ul>
     </div>
@@ -1422,6 +1422,10 @@ function analyzePixels(rgba, w, h, opts) {
         x: coords ? coords[i * 2] : i % w,
         y: coords ? coords[i * 2 + 1] : Math.floor(i / w),
         hex: rgbToHex(r, g, b), r, g, b, h: hh, s: ss, v: vv,
+        redness: (r + b) > 0 ? Math.round(((r - b) / (r + b)) * 1000) / 1000 : 0,
+        cct: rgbToCCT(r, g, b),
+        dark_channel: Math.round((Math.min(r, g, b) / 255) * 1000) / 1000,
+        hue_class: (ss >= 10 && vv >= 10) ? ((hh < 90 || hh >= 330) ? 'warm' : 'cool') : 'neutral',
       };
       if (includeLab) {
         const [Lp, Ap, Bp] = rgbToLab(r, g, b);
@@ -1782,6 +1786,13 @@ function renderResults(cards, total, ok, failed, opts) {
           <option value="hist">Histogram (summed)</option>
           <option value="palette">Aggregate palette</option>
           <option value="dist">Metric distribution</option>
+          <optgroup label="Dataset spatial (needs Spatial structure)">
+            <option value="dsgrid">Mean composite grid</option>
+            <option value="dsvar">Variability (SD) grid</option>
+            <option value="dselev">Mean elevation profile</option>
+            <option value="dsazim">Mean azimuth profile</option>
+            <option value="dsclust">Cluster-centroid density</option>
+          </optgroup>
         </select>
         <div id="dsctl"></div>
         <button class="btn btn-outline btn-sm" onclick="downloadDatasetPNG()">⬇ PNG</button>
@@ -1869,7 +1880,7 @@ function renderSwatches(clusters) {
 const HIST_MODES = { hue: 'Hue', sat: 'Saturation', val: 'Value' };
 
 // ── Dataset visualizations (histogram, aggregate palette, metric distribution) ──
-window._dsState = { kind: 'hist', channel: 'hue', metric: 'colourfulness' };
+window._dsState = { kind: 'hist', channel: 'hue', metric: 'colourfulness', channelSp: 'b', valign: 'mask', halign: 'none' };
 function dsCanvas() { return document.getElementById('ds-canvas'); }
 function dsMetricOptions() {
   const opts = [['colourfulness', 'colourfulness'], ['redness', 'redness'], ['cct', 'CCT'], ['rms_contrast', 'RMS contrast'], ['dark_channel', 'dark-channel'],
@@ -1893,6 +1904,7 @@ function showDatasetViz(kind) {
       `<label style="font-size:0.72rem;margin-right:6px"><input type="radio" name="dsch" value="${ch}" ${window._dsState.channel === ch ? 'checked' : ''} onclick="setDsChannel('${ch}')"> ${({ hue: 'hue', sat: 'saturation', val: 'value' })[ch]}</label>`).join('');
     else if (kind === 'dist') ctl.innerHTML = '<span style="font-size:0.72rem">metric:</span> <select style="font-size:0.72rem" onchange="setDsMetric(this.value)">' +
       dsMetricOptions().map(o => `<option value="${o[0]}" ${window._dsState.metric === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+    else if (['dsgrid', 'dsvar', 'dselev', 'dsazim', 'dsclust'].includes(kind)) ctl.innerHTML = dsSpatialControlsHtml(kind);
     else ctl.innerHTML = '';
   }
   drawDatasetViz();
@@ -1914,6 +1926,7 @@ function aggregatePalette() {
 function renderDatasetViz(ctx, W, H) {
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   const st = window._dsState;
+  if (['dsgrid', 'dsvar', 'dselev', 'dsazim', 'dsclust'].includes(st.kind)) { renderDatasetSpatial(ctx, W, H); return; }
   if (st.kind === 'palette') {
     ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText('Aggregate palette — all images, sorted by hue', 8, 14);
     const items = aggregatePalette(), mL = 8, mT = 20, mB = 8, plotW = W - 16, plotH = H - mT - mB; let x = mL;
@@ -1964,6 +1977,183 @@ function downloadDatasetPNG() {
   const SCALE = 4, off = document.createElement('canvas'); off.width = cv.width * SCALE; off.height = cv.height * SCALE;
   const octx = off.getContext('2d'); octx.scale(SCALE, SCALE); renderDatasetViz(octx, cv.width, cv.height);
   downloadPngDPI(off, 'dataset_' + window._dsState.kind + '_' + todayStamp() + '.png', 300);
+}
+
+// ── Dataset spatial composites (mean grid, variability, profiles, centroid density) ──
+const DS_CHANNELS = [['b', 'b*'], ['L', 'L*'], ['C', 'C*ab'], ['S', 'saturation'], ['V', 'value'], ['a', 'a*'],
+  ['red', 'redness'], ['cct', 'CCT'], ['colf', 'colourfulness'], ['rms', 'RMS contrast'], ['dark', 'dark-channel'],
+  ['R', 'R'], ['G', 'G'], ['B', 'B']];
+function dsChanLabel(ch) { const o = DS_CHANNELS.find(x => x[0] === ch); return o ? o[1] : ch; }
+function setDsChannelSp(v) { window._dsState.channelSp = v; drawDatasetViz(); }
+function setDsValign(v) { window._dsState.valign = v; drawDatasetViz(); }
+function setDsHalign(v) { window._dsState.halign = v; drawDatasetViz(); }
+function dsSpatialControlsHtml(kind) {
+  const s = window._dsState, fs = 'font-size:0.72rem';
+  const chSel = '<select style="' + fs + '" onchange="setDsChannelSp(this.value)">' +
+    DS_CHANNELS.map(o => `<option value="${o[0]}" ${(s.channelSp || 'b') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+  const vSel = '<select style="' + fs + '" onchange="setDsValign(this.value)">' +
+    [['mask', 'horizon→zenith (mask)'], ['fixed', 'fixed range']].map(o => `<option value="${o[0]}" ${(s.valign || 'mask') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+  const hSel = '<select style="' + fs + '" onchange="setDsHalign(this.value)">' +
+    [['none', 'none'], ['bright', 'brightest col'], ['north', 'compass N'], ['sun', 'sun']].map(o => `<option value="${o[0]}" ${(s.halign || 'none') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+  const chBit = (kind === 'dsclust') ? '' : `<span style="${fs}">channel:</span> ${chSel} `;
+  return chBit + `<span style="${fs};margin-left:6px">vert:</span> ${vSel} <span style="${fs};margin-left:6px">azimuth:</span> ${hSel}`;
+}
+// Bearing (deg from north) between two lat/lon points
+function _bearing(la1, lo1, la2, lo2) {
+  const t = Math.PI / 180, y = Math.sin((lo2 - lo1) * t) * Math.cos(la2 * t);
+  const x = Math.cos(la1 * t) * Math.sin(la2 * t) - Math.sin(la1 * t) * Math.cos(la2 * t) * Math.cos((lo2 - lo1) * t);
+  return (Math.atan2(y, x) / t + 360) % 360;
+}
+function _parseExifDate(s) {
+  if (!s) return null;
+  const m = String(s).match(/(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
+}
+// Per-image heading (camera-forward bearing) from the GPS track, ordered by capture time
+function _headingMap() {
+  const geo = (window._results || []).filter(r => r.exif && r.exif.gps_lat != null && r.exif.gps_lon != null)
+    .map(r => ({ id: r.id, lat: r.exif.gps_lat, lon: r.exif.gps_lon, t: _parseExifDate(r.exif.datetime) }));
+  geo.sort((a, b) => (a.t == null ? 0 : a.t) - (b.t == null ? 0 : b.t));
+  const H = {};
+  for (let i = 0; i < geo.length; i++) {
+    const a = geo[i], b = geo[i + 1] || geo[i - 1];
+    if (b && (a.lat !== b.lat || a.lon !== b.lon))
+      H[a.id] = (i < geo.length - 1) ? _bearing(a.lat, a.lon, b.lat, b.lon) : _bearing(b.lat, b.lon, a.lat, a.lon);
+  }
+  return H;
+}
+// Approximate solar azimuth (deg from north, clockwise); tUTC in ms
+function _solarAz(lat, lon, tUTC) {
+  const rad = Math.PI / 180, n = tUTC / 86400000 + 2440587.5 - 2451545.0;
+  let L = (280.460 + 0.9856474 * n) % 360; if (L < 0) L += 360;
+  const g = ((357.528 + 0.9856003 * n) % 360) * rad;
+  const lam = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+  const eps = (23.439 - 0.0000004 * n) * rad;
+  const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
+  const ra = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam));
+  let gmst = (280.46061837 + 360.98564736629 * n) % 360; if (gmst < 0) gmst += 360;
+  const lst = (gmst + lon) * rad, ha = lst - ra, la = lat * rad;
+  let az = Math.atan2(Math.sin(ha), Math.cos(ha) * Math.sin(la) - Math.tan(dec) * Math.cos(la));
+  az = (az / rad + 180) % 360; if (az < 0) az += 360;
+  return az;
+}
+// Aggregate every image's grid into a common DX×DY dataset grid, with registration
+function dsSpatialData() {
+  const s = window._dsState, ch = s.channelSp || 'b', valign = s.valign || 'mask', halign = s.halign || 'none';
+  const res = (window._results || []).filter(r => r.spatial && r.spatial.grid && r.spatial.grid.length);
+  if (!res.length) return null;
+  let DX = 1, DY = 1; res.forEach(r => { DX = Math.max(DX, r.spatial.gridX); DY = Math.max(DY, r.spatial.gridY); });
+  DX = Math.min(DX, 48); DY = Math.min(DY, 32);
+  const HM = (halign === 'north' || halign === 'sun') ? _headingMap() : {};
+  const N = DX * DY;
+  const sum = new Float64Array(N), sum2 = new Float64Array(N), cnt = new Float64Array(N), dens = new Float64Array(N);
+  let aligned = 0, total = 0;
+  for (const r of res) {
+    const g = r.spatial.grid, GX = r.spatial.gridX, GY = r.spatial.gridY;
+    let minCY = GY, maxCY = 0; g.forEach(o => { if (o.cell_y < minCY) minCY = o.cell_y; if (o.cell_y > maxCY) maxCY = o.cell_y; });
+    const yLo = (minCY + 0.5) / GY, yHi = (maxCY + 0.5) / GY, yRange = (yHi - yLo) || 1;
+    let shift = 0, ok = (halign === 'none'); total++;
+    if (halign === 'bright') {
+      const cv = new Float64Array(GX), cnc = new Float64Array(GX);
+      g.forEach(o => { cv[o.cell_x] += o.lightness * o.n; cnc[o.cell_x] += o.n; });
+      let bi = 0, bv = -1; for (let x = 0; x < GX; x++) { const v = cnc[x] ? cv[x] / cnc[x] : -1; if (v > bv) { bv = v; bi = x; } }
+      shift = -((bi + 0.5) / GX); ok = true;
+    } else if (halign === 'north' || halign === 'sun') {
+      const h = HM[r.id];
+      if (h != null) {
+        let f = h / 360;
+        if (halign === 'sun' && r.exif && r.exif.gps_lat != null) {
+          const wall = _parseExifDate(r.exif.datetime);
+          if (wall != null) { const off = Math.round(r.exif.gps_lon / 15); f = (h - _solarAz(r.exif.gps_lat, r.exif.gps_lon, wall - off * 3600000)) / 360; }
+        }
+        shift = f; ok = true;
+      }
+    }
+    if (ok && halign !== 'none') aligned++;
+    for (const o of g) {
+      let fx = (o.cell_x + 0.5) / GX + shift; fx = ((fx % 1) + 1) % 1;
+      let fy = (o.cell_y + 0.5) / GY; if (valign === 'mask') fy = (fy - yLo) / yRange;
+      fy = Math.min(0.999, Math.max(0, fy));
+      const di = Math.min(DY - 1, Math.floor(fy * DY)) * DX + Math.min(DX - 1, Math.floor(fx * DX));
+      const v = cellChanVal(o, ch); if (v == null || !isFinite(v)) continue;
+      sum[di] += v * o.n; sum2[di] += v * v * o.n; cnt[di] += o.n;
+    }
+    for (const c of (r.clusters || [])) {
+      if (c.centroid_x_rel == null) continue;
+      let fx = c.centroid_x_rel + shift; fx = ((fx % 1) + 1) % 1;
+      let fy = c.centroid_y_rel; if (valign === 'mask') fy = (fy - yLo) / yRange; fy = Math.min(0.999, Math.max(0, fy));
+      dens[Math.min(DY - 1, Math.floor(fy * DY)) * DX + Math.min(DX - 1, Math.floor(fx * DX))] += (c.weighted_count != null ? c.weighted_count : c.pixel_count);
+    }
+  }
+  return { DX, DY, sum, sum2, cnt, dens, ch, valign, halign, aligned, total, nImg: res.length };
+}
+function drawRampLegend(ctx, x, y, h, vmin, vmax) {
+  const w = 12, steps = 40;
+  for (let i = 0; i < steps; i++) { ctx.fillStyle = vizRamp(1 - i / (steps - 1)); ctx.fillRect(x, y + (i / steps) * h, w, h / steps + 1); }
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText((Math.round(vmax * 100) / 100) + '', x + w + 3, y + 6);
+  ctx.fillText((Math.round(vmin * 100) / 100) + '', x + w + 3, y + h);
+}
+function renderDatasetSpatial(ctx, W, H) {
+  const st = window._dsState, kind = st.kind, d = dsSpatialData();
+  if (!d) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('Enable Spatial structure, then analyze images, to build dataset composites.', 10, 24); return; }
+  const { DX, DY, sum, sum2, cnt, dens, ch } = d, label = dsChanLabel(ch);
+  const aNote = ` · V:${d.valign} H:${d.halign}${d.halign !== 'none' ? ` (${d.aligned}/${d.total} aligned)` : ''}`;
+  if (kind === 'dsgrid' || kind === 'dsvar' || kind === 'dsclust') {
+    const title = kind === 'dsgrid' ? `Mean ${label} by position` : kind === 'dsvar' ? `Variability (SD) of ${label} by position` : 'Cluster-centroid density';
+    ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText(`${title} — ${d.nImg} images${aNote}`, 8, 13);
+    const field = new Float64Array(DX * DY).fill(NaN);
+    for (let i = 0; i < DX * DY; i++) {
+      if (kind === 'dsclust') field[i] = dens[i];
+      else if (cnt[i]) { const m = sum[i] / cnt[i]; field[i] = kind === 'dsvar' ? Math.sqrt(Math.max(0, sum2[i] / cnt[i] - m * m)) : m; }
+    }
+    let vmin = Infinity, vmax = -Infinity; for (let i = 0; i < field.length; i++) { const v = field[i]; if (!isNaN(v)) { if (v < vmin) vmin = v; if (v > vmax) vmax = v; } }
+    if (!isFinite(vmin)) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('No data', 10, 40); return; }
+    const mL = 8, mT = 20, mR = 60, mB = 24, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / DX, chh = plotH / DY;
+    for (let y = 0; y < DY; y++) for (let x = 0; x < DX; x++) { const v = field[y * DX + x]; if (isNaN(v)) continue; ctx.fillStyle = vizRamp((v - vmin) / ((vmax - vmin) || 1)); ctx.fillRect(mL + x * cw, mT + y * chh, Math.ceil(cw), Math.ceil(chh)); }
+    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
+    ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('← azimuth →', mL + plotW / 2, mT + plotH + 15);
+    ctx.save(); ctx.translate(mL + 9, mT + plotH / 2); ctx.rotate(-Math.PI / 2); ctx.fillText('horizon ← elevation → zenith', 0, 0); ctx.restore();
+    ctx.textAlign = 'left'; drawRampLegend(ctx, mL + plotW + 12, mT, plotH, vmin, vmax);
+    return;
+  }
+  // Marginal profiles: elevation (over columns) or azimuth (over rows)
+  const isElev = kind === 'dselev', NN = isElev ? DY : DX;
+  const mV = new Float64Array(NN), mV2 = new Float64Array(NN), mN = new Float64Array(NN);
+  for (let y = 0; y < DY; y++) for (let x = 0; x < DX; x++) { const i = y * DX + x; if (!cnt[i]) continue; const k = isElev ? y : x; mV[k] += sum[i]; mV2[k] += sum2[i]; mN[k] += cnt[i]; }
+  const pts = []; for (let k = 0; k < NN; k++) { if (!mN[k]) continue; const m = mV[k] / mN[k]; pts.push({ k, m, sd: Math.sqrt(Math.max(0, mV2[k] / mN[k] - m * m)) }); }
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText(`${isElev ? 'Mean elevation' : 'Mean azimuth'} profile of ${label} — ${d.nImg} images${aNote}`, 8, 13);
+  if (pts.length < 2) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('Not enough data', 10, 40); return; }
+  let lo = Infinity, hi = -Infinity; pts.forEach(p => { lo = Math.min(lo, p.m - p.sd); hi = Math.max(hi, p.m + p.sd); });
+  const span = (hi - lo) || 1;
+  const mL = 46, mR = 12, mT = 22, mB = 26, plotW = W - mL - mR, plotH = H - mT - mB;
+  if (isElev) {
+    // elevation on Y (top=zenith), value on X
+    const vx = v => mL + ((v - lo) / span) * plotW, ky = k => mT + (1 - k / (NN - 1)) * plotH;
+    ctx.fillStyle = 'rgba(58,110,165,0.18)'; ctx.beginPath();
+    pts.forEach((p, i) => { const X = vx(p.m + p.sd), Y = ky(p.k); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+    for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(vx(pts[i].m - pts[i].sd), ky(pts[i].k)); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#3a6ea5'; ctx.lineWidth = 1.5; ctx.beginPath(); pts.forEach((p, i) => { const X = vx(p.m), Y = ky(p.k); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
+    ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText('zenith', mL - 4, mT + 8); ctx.fillText('horizon', mL - 4, mT + plotH);
+    ctx.textAlign = 'center'; ctx.fillText(label + ' →', mL + plotW / 2, mT + plotH + 16);
+    ctx.fillText((Math.round(lo * 100) / 100) + '', mL, mT + plotH + 16); ctx.fillText((Math.round(hi * 100) / 100) + '', mL + plotW, mT + plotH + 16);
+  } else {
+    // azimuth on X, value on Y
+    const kx = k => mL + (k / (NN - 1)) * plotW, vy = v => mT + (1 - (v - lo) / span) * plotH;
+    ctx.fillStyle = 'rgba(58,110,165,0.18)'; ctx.beginPath();
+    pts.forEach((p, i) => { const X = kx(p.k), Y = vy(p.m + p.sd); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+    for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(kx(pts[i].k), vy(pts[i].m - pts[i].sd)); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#3a6ea5'; ctx.lineWidth = 1.5; ctx.beginPath(); pts.forEach((p, i) => { const X = kx(p.k), Y = vy(p.m); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.strokeStyle = '#dde8ed'; ctx.beginPath(); ctx.moveTo(mL, mT); ctx.lineTo(mL, mT + plotH); ctx.lineTo(mL + plotW, mT + plotH); ctx.stroke();
+    ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText((Math.round(hi * 100) / 100) + '', mL - 4, mT + 8); ctx.fillText((Math.round(lo * 100) / 100) + '', mL - 4, mT + plotH);
+    ctx.textAlign = 'center'; ctx.fillText(d.halign === 'none' ? '← azimuth (image columns) →' : '← azimuth (aligned) →', mL + plotW / 2, mT + plotH + 16);
+  }
+  ctx.textAlign = 'left';
 }
 
 function histControlsHtml(id) {
@@ -2471,7 +2661,7 @@ function downloadHistogramCSV() {
 function downloadPixelCSV() {
   const includeLab = labSelected();
   const header = ['image_id', 'filename', 'x', 'y', 'hex', 'RGB_R', 'RGB_G', 'RGB_B',
-    'HSV_H', 'HSV_S', 'HSV_V',
+    'HSV_H', 'HSV_S', 'HSV_V', 'redness', 'cct', 'dark_channel', 'hue_class',
     ...(includeLab ? ['LAB_L', 'LAB_A', 'LAB_B', 'LCH_L', 'LCH_C', 'LCH_H'] : []),
     'cluster_id', 'cluster_hex'];
   const parts = [header.join(',') + '\n'];
@@ -2481,6 +2671,7 @@ function downloadPixelCSV() {
     const chunk = r.pixelRows.map(p => {
       const lab = includeLab ? [p.lab_l ?? '', p.lab_a ?? '', p.lab_b ?? '', p.lab_l ?? '', p.lch_c ?? '', p.lch_h ?? ''] : [];
       return [r.id, csvEscape(r.filename), p.x, p.y, p.hex, p.r, p.g, p.b, p.h, p.s, p.v,
+       p.redness, p.cct, p.dark_channel, p.hue_class,
        ...lab, p.cluster_id ?? '', p.cluster_hex ?? ''].join(',');
     }).join('\n');
     parts.push(chunk + '\n');
