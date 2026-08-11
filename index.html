@@ -541,6 +541,7 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
     <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
     <input type="file" id="folderInput" webkitdirectory style="display:none">
     <div class="file-pill-row" id="filePills"></div>
+    <div id="preflight"></div>
 
     <div class="field" style="margin-top:0.8rem">
       <label for="imageUrl">Image URLs (optional, one per line)</label>
@@ -722,8 +723,9 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
               </div>
               <div class="cfg-row" id="projEquirect" style="gap:.35rem">
                 <span class="hint" style="margin:0" title="Elevation of the top and bottom image rows. 90 = zenith (up), 0 = horizon; full sphere = 90 to −90.">Elev°</span>
-                <label style="margin:0" title="Top row elevation (90 = zenith)">top <input type="number" id="projTop" value="90" min="-90" max="90" step="1" style="width:52px" oninput="updateProjPreview()"></label>
-                <label style="margin:0" title="Bottom row elevation (0 = horizon)">bot <input type="number" id="projBottom" value="0" min="-90" max="90" step="1" style="width:52px" oninput="updateProjPreview()"></label>
+                <label style="margin:0" title="Top row elevation (90 = zenith)">top <input type="number" id="projTop" value="90" min="-90" max="90" step="1" style="width:52px" oninput="updateProjUI()"></label>
+                <label style="margin:0" title="Bottom row elevation. Full 360° photo = −90 (nadir); upper-hemisphere sky crop = 0 (horizon)">bot <input type="number" id="projBottom" value="-90" min="-90" max="90" step="1" style="width:52px" oninput="updateProjUI()"></label>
+                <span class="hint" style="margin:0">full 360° = 90 / −90</span>
               </div>
               <div class="cfg-row" id="projFisheye" style="display:none;gap:.35rem">
                 <span class="hint" style="margin:0" title="Full angular diameter the disk spans. 180 = horizon at the rim, zenith-centred. Disk assumed centred, radius = min(w,h)/2.">Full angle°</span>
@@ -735,20 +737,21 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
                   <option value="native">Native (matched weighting)</option>
                   <option value="convert">Convert first</option>
                 </select>
-                <select id="convType" class="proj-sel" style="display:none" onchange="updateProjPreview()" title="Target projection to reproject into before analysis. Lambert equal-area makes naive pixel stats unbiased.">
+                <select id="convType" class="proj-sel" style="display:none" onchange="updateProjUI()" title="Target projection to reproject into before analysis. Lambert equal-area makes naive pixel stats unbiased.">
                   <option value="lambert">→ Lambert equal-area</option>
                   <option value="equirect">→ Equirectangular</option>
                   <option value="stereographic">→ Stereographic</option>
                   <option value="azimuthal_equidistant">→ Azimuthal equidistant</option>
                 </select>
-                <label id="convFovL" style="margin:0;display:none" title="Full angle of the target disk (180 = horizon at rim)">edge° <input type="number" id="convFov" value="180" min="30" max="360" step="1" style="width:50px" oninput="updateProjPreview()"></label>
+                <label id="convFovL" style="margin:0;display:none" title="Angular diameter of the target disk (edge/2 = the largest zenith angle shown). Auto-set from your elevation range to cover the whole source; edit to crop.">edge° <input type="number" id="convFov" value="360" min="30" max="360" step="1" style="width:50px" oninput="updateProjPreview()"></label>
               </div>
               <div class="cfg-row" style="gap:.4rem">
                 <span class="hint" style="margin:0">Spatial</span>
-                <select id="spatialMode" class="proj-sel" title="Cartesian = x·y grid (azimuth × elevation). Polar = rings × wedges (elevation × azimuth) — suited to disk/tiny-planet frames.">
+                <select id="spatialMode" class="proj-sel" title="Cartesian = x·y grid (azimuth × elevation). Polar = rings × wedges — only valid on a disk/azimuthal analysis frame.">
                   <option value="cartesian">Cartesian grid</option>
                   <option value="polar">Polar (rings × wedges)</option>
                 </select>
+                <span class="hint" id="spatialHint" style="margin:0"></span>
               </div>
               <div class="cfg-row" style="gap:.4rem">
                 <span class="hint" style="margin:0">Export</span>
@@ -763,7 +766,7 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
             </div>
           </div>
           <div id="projInfo" style="display:none;margin-top:.5rem;padding:.5rem .65rem;background:var(--accent-light);border-radius:6px;font-size:.78rem;line-height:1.5">
-            <b>Choosing settings.</b> <b>Equirectangular</b>: 2:1 panorama — set Elev top 90 (zenith) / bottom 0 (horizon), or 90/−90 for a full sphere; weighting is cos(elevation). <b>Fisheye</b>: circular, centred — set Full angle to the lens FOV (usually 180); equidistant needs weighting, equisolid is already equal-area. <b>Stereographic / tiny-planet</b>: zenith-centred disk, Full angle 180 = horizon at the rim; the rim is hugely stretched (down-weighted ∝ cos⁴(θ/2)) — best for figures, not naive stats. <b>Lambert equal-area</b>: equal-area disk — naive stats are unbiased (good convert-first target). <b>Azimuthal equidistant</b>: radius ∝ elevation angle. &nbsp;<b>Frame</b>: use <i>Native</i> to keep resolution (weighting corrects the bias), or <i>Convert first → Lambert</i> for an unbiased equal-area analysis. <b>Spatial</b>: pick <i>Polar</i> for disk/azimuthal frames so grids and profiles read as rings (elevation) and wedges (azimuth).
+            <b>Choosing settings.</b> <b>Equirectangular</b>: a standard 360 photo is 2:1 = 360°×180° — set Elev <b>top 90 / bottom −90</b> (zenith to nadir). Use 90 / 0 only if your image is an upper-hemisphere crop (horizon at the bottom row). This range drives the cos(elevation) weighting and, when converting, which rows are sampled — so it must match your actual image. The disk <b>edge°</b> auto-fills from this range to cover the whole source (edge = 2·(top−bottom): 90/−90 → 360 full sphere; 90/0 → 180 hemisphere); edit it to crop. <b>Fisheye</b>: circular, centred — set Full angle to the lens FOV (usually 180); equidistant needs weighting, equisolid is already equal-area. <b>Stereographic / tiny-planet</b>: zenith-centred disk, Full angle 180 = horizon at the rim; the rim is hugely stretched (down-weighted ∝ cos⁴(θ/2)) — best for figures, not naive stats. <b>Lambert equal-area</b>: equal-area disk — naive stats are unbiased (good convert-first target). <b>Azimuthal equidistant</b>: radius ∝ elevation angle. &nbsp;<b>Frame</b>: use <i>Native</i> to keep resolution (weighting corrects the bias), or <i>Convert first → Lambert</i> for an unbiased equal-area analysis. <b>Spatial</b>: pick <i>Polar</i> for disk/azimuthal frames so grids and profiles read as rings (elevation) and wedges (azimuth).
           </div>
         </details>
 
@@ -1756,11 +1759,142 @@ function addFiles(fileList) {
   }
   if (skipped) log(`Skipped ${skipped} non-image file(s)`);
   renderFilePills();
+  runPreflight();
 }
+
+/* ── Preflight: inspect the queued imagery and recommend settings ────────
+   Detect → recommend → apply on click. Nothing is changed silently, and every
+   applied recommendation is written to the log so a run stays documented. */
+let _pfState = null;
+function _pfAlphaBand(bmp) {
+  const W = 48, H = Math.max(8, Math.min(256, Math.round(W * bmp.height / bmp.width)));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  cx.clearRect(0, 0, W, H); cx.drawImage(bmp, 0, 0, W, H);
+  const d = cx.getImageData(0, 0, W, H).data;
+  let lo = -1, hi = -1, anyClear = false;
+  for (let y = 0; y < H; y++) {
+    let on = false;
+    for (let x = 0; x < W; x++) { const a = d[(y * W + x) * 4 + 3]; if (a > 128) on = true; else anyClear = true; }
+    if (on) { if (lo < 0) lo = y; hi = y; }
+  }
+  if (lo < 0) return { lo: 0, hi: 1, hasAlpha: anyClear };
+  return { lo: lo / H, hi: (hi + 1) / H, hasAlpha: anyClear };
+}
+async function runPreflight() {
+  const el = document.getElementById('preflight');
+  if (!el) return;
+  if (!queuedFiles.length) { el.innerHTML = ''; _pfState = null; return; }
+  el.innerHTML = '<div style="font-size:.72rem;color:#6b7a8d;padding:.4rem 0">Checking imagery…</div>';
+  const step = Math.max(1, Math.floor(queuedFiles.length / 12));
+  const sample = queuedFiles.filter((_, i) => i % step === 0).slice(0, 12);
+  const dims = [], bands = [], coords = [];
+  let withAlpha = 0;
+  for (const f of sample) {
+    try {
+      const buf = await f.arrayBuffer();
+      try { const ex = parseExif(buf); if (ex && ex.gps_lat != null) coords.push(ex.gps_lat.toFixed(5) + ',' + ex.gps_lon.toFixed(5)); } catch (e) {}
+      const bmp = await createImageBitmap(new Blob([buf]));
+      dims.push([bmp.width, bmp.height]);
+      const b = _pfAlphaBand(bmp); bands.push(b); if (b.hasAlpha) withAlpha++;
+      if (bmp.close) bmp.close();
+    } catch (e) { /* unreadable — skip */ }
+  }
+  if (!dims.length) { el.innerHTML = ''; return; }
+  const sameDim = dims.every(d => d[0] === dims[0][0] && d[1] === dims[0][1]);
+  const aspect = dims[0][0] / dims[0][1];
+  const shape = Math.abs(aspect - 2) < 0.06 ? 'equirect' : (Math.abs(aspect - 1) < 0.06 ? 'disk' : 'other');
+  const los = bands.map(b => b.lo), his = bands.map(b => b.hi);
+  const lo = Math.min(...los), hi = Math.max(...his);
+  const spread = Math.max(Math.max(...los) - Math.min(...los), Math.max(...his) - Math.min(...his));
+  const uniqueCoords = new Set(coords).size;
+  _pfState = { n: queuedFiles.length, sampled: sample.length, sameDim, dims: dims[0], shape, lo, hi, spread, withAlpha, uniqueCoords, hasGps: coords.length > 0 };
+  el.innerHTML = _pfHtml(_pfState);
+}
+function _pfDeg(f) {
+  const t = parseFloat((document.getElementById('projTop') || {}).value), b = parseFloat((document.getElementById('projBottom') || {}).value);
+  if (!isFinite(t) || !isFinite(b)) return null;
+  return Math.round((t + (b - t) * f) * 10) / 10;
+}
+function _pfHtml(p) {
+  const row = (state, text, btn) =>
+    `<div style="display:flex;gap:.5rem;align-items:flex-start;padding:.3rem 0;font-size:.72rem;line-height:1.45">
+       <span style="flex:0 0 auto">${state === 'ok' ? '✓' : state === 'warn' ? '▲' : 'ℹ'}</span>
+       <span style="flex:1 1 auto;color:#3d4a5c">${text}</span>${btn || ''}</div>`;
+  const b = (fn, lab) => `<button class="btn btn-outline btn-sm" style="flex:0 0 auto;font-size:.68rem;padding:.15rem .45rem" onclick="${fn}">${lab}</button>`;
+  const rows = [];
+
+  // 1 — shape → projection and elevation range
+  if (p.shape === 'equirect')
+    rows.push(row('ok', `<b>2:1 frame</b> (${p.dims[0]}×${p.dims[1]}) — equirectangular. Elevation should be <b>90 / −90</b> for a full sphere.`,
+      b('pfApplyEquirect()', 'Set')));
+  else if (p.shape === 'disk')
+    rows.push(row('ok', `<b>Square frame</b> (${p.dims[0]}×${p.dims[1]}) — a disk projection (fisheye, tiny-planet or azimuthal). Set the input projection and full angle to match the lens.`, ''));
+  else
+    rows.push(row('warn', `<b>Frame is ${aspectStr(p)}</b> — neither 2:1 nor square, so it is probably a crop. Whatever elevation range you set must be the crop's true vertical extent, not the sphere's.`, ''));
+
+  // 2 — occupied extent
+  if (p.withAlpha) {
+    const pctOcc = Math.round((p.hi - p.lo) * 100);
+    const d0 = _pfDeg(p.lo), d1 = _pfDeg(p.hi);
+    const degTxt = (d0 != null && p.shape === 'equirect') ? ` — about <b>${d0}°</b> to <b>${d1}°</b>` : '';
+    rows.push(row(pctOcc < 90 ? 'warn' : 'ok',
+      `<b>Data occupies ${pctOcc}% of the frame</b>${degTxt}; the rest is transparent. Dataset composites use <i>common extent</i> alignment, so they cover only this band and no rows are wasted.`,
+      pctOcc < 90 ? b('pfApplyGrid()', 'Raise grid') : ''));
+  } else {
+    rows.push(row('ok', 'No transparency — the whole frame carries data.', ''));
+  }
+
+  // 3 — consistency across the set
+  if (!p.sameDim)
+    rows.push(row('warn', '<b>Images differ in size.</b> Composites will be misregistered unless every frame shares one coordinate system. Re-export them on a common canvas.', ''));
+  else if (p.spread > 0.02)
+    rows.push(row('warn', `<b>The data extent varies between images</b> (by up to ${Math.round(p.spread * 100)}% of frame height). Per-image alignment is the safer choice here.`,
+      b("pfApplyValign('mask')", 'Use per-image')));
+  else
+    rows.push(row('ok', `Frames share one size and a consistent data extent (varying by under ${Math.max(1, Math.round(p.spread * 100))}%), so absolute position is comparable across the set.`,
+      b("pfApplyValign('fixed')", 'Use common')));
+
+  // 4 — stationary or moving → azimuth registration
+  if (!p.hasGps)
+    rows.push(row('info', 'No GPS in the sampled files, so compass and sun azimuth registration are unavailable. Use <i>none</i> for a fixed camera, or <i>brightest column</i> otherwise.', b("pfApplyHalign('none')", 'Azimuth: none')));
+  else if (p.uniqueCoords === 1)
+    rows.push(row('ok', '<b>All sampled frames share one location</b> — a fixed camera, so the frames are already registered and azimuth is true bearing. Rotating them would destroy that.',
+      b("pfApplyHalign('none')", 'Azimuth: none')));
+  else
+    rows.push(row('info', `<b>${p.uniqueCoords} distinct locations</b> in the sample — a moving capture. Compass-N registration is available and will align frames to true bearing.`,
+      b("pfApplyHalign('north')", 'Azimuth: compass N')));
+
+  return `<div style="border:1px solid #dde8ed;border-radius:6px;padding:.5rem .7rem;margin:.5rem 0;background:#fafcfd">
+      <div style="font-size:.72rem;font-weight:600;color:#1a2332;margin-bottom:.15rem">Data check
+        <span style="font-weight:400;color:#6b7a8d">— ${p.sampled} of ${p.n} file(s) sampled. Nothing is changed until you apply it.</span></div>
+      ${rows.join('')}</div>`;
+}
+function aspectStr(p) { return `${p.dims[0]}×${p.dims[1]}`; }
+function _pfLog(msg) { try { log('Data check: ' + msg); } catch (e) {} }
+function pfApplyEquirect() {
+  const m = document.getElementById('imageryMode'); if (m) { m.value = '360'; m.dispatchEvent(new Event('change')); }
+  const t = document.getElementById('projType'); if (t) { t.value = 'equirect'; t.dispatchEvent(new Event('change')); }
+  const a = document.getElementById('projTop'), b2 = document.getElementById('projBottom');
+  if (a) { a.value = 90; a.dispatchEvent(new Event('change')); }
+  if (b2) { b2.value = -90; b2.dispatchEvent(new Event('change')); }
+  _pfLog('input projection set to equirectangular, elevation 90 / −90.');
+  runPreflight();
+}
+function pfApplyGrid() {
+  const p = _pfState; if (!p) return;
+  const occ = Math.max(0.05, p.hi - p.lo);
+  const gy = Math.max(8, Math.min(64, Math.round(24 / occ)));
+  const el = document.getElementById('gridY'); if (el) { el.value = gy; el.dispatchEvent(new Event('change')); }
+  _pfLog(`grid rows set to ${gy} so the occupied band gets roughly 24 rows.`);
+}
+function pfApplyValign(v) { window._dsState.valign = v; if (typeof drawDatasetViz === 'function') drawDatasetViz(); _pfLog('vertical alignment set to ' + v + '.'); }
+function pfApplyHalign(v) { window._dsState.halign = v; if (typeof drawDatasetViz === 'function') drawDatasetViz(); _pfLog('azimuth registration set to ' + v + '.'); }
 
 function removeFile(idx) {
   queuedFiles.splice(idx, 1);
   renderFilePills();
+  runPreflight();
 }
 
 function renderFilePills() {
@@ -2212,7 +2346,7 @@ function renderSwatches(clusters) {
 const HIST_MODES = { hue: 'Hue', sat: 'Saturation', val: 'Value' };
 
 // ── Dataset visualizations (histogram, aggregate palette, metric distribution) ──
-window._dsState = { kind: 'hist', channel: 'hue', metric: 'colourfulness', channelSp: 'b', valign: 'mask', halign: 'none', gridMeasure: 'mean', geom: 'auto' };
+window._dsState = { kind: 'hist', channel: 'hue', metric: 'colourfulness', channelSp: 'b', valign: 'fixed', halign: 'none', gridMeasure: 'mean', geom: 'auto' };
 function dsCanvas() { return document.getElementById('ds-canvas'); }
 function dsMetricOptions() {
   const opts = [['colourfulness', 'colourfulness'], ['redness', 'redness'], ['cct', 'CCT'], ['rms_contrast', 'RMS contrast'], ['dark_channel', 'dark-channel'],
@@ -2327,7 +2461,7 @@ function dsSpatialControlsHtml(kind) {
   const s = window._dsState, fs = 'font-size:0.72rem';
   const mk = (setter, val, opts) => `<select style="${fs}" onchange="${setter}(this.value)">` + opts.map(o => `<option value="${o[0]}" ${val === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
   const chSel = mk('setDsChannelSp', s.channelSp || 'b', DS_CHANNELS);
-  const vSel = mk('setDsValign', s.valign || 'mask', [['mask', 'horizon→zenith'], ['fixed', 'fixed range']]);
+  const vSel = mk('setDsValign', s.valign || 'fixed', [['fixed', 'common extent'], ['canvas', 'full frame'], ['mask', 'per-image']]);
   const hSel = mk('setDsHalign', s.halign || 'none', [['none', 'none'], ['bright', 'brightest col'], ['north', 'compass N'], ['sun', 'sun']]);
   const measSel = mk('setDsGridMeasure', s.gridMeasure || 'mean', [['mean', 'mean'], ['median', 'median'], ['sd', 'SD / variability'], ['lisa', "local Moran's I"]]);
   const geomSel = mk('setDsGeom', s.geom || 'auto', [['auto', 'auto'], ['rect', 'rectangular'], ['polar', 'polar']]);
@@ -2398,6 +2532,7 @@ function _dsShift(r, g, GX, halign, HM) {
 }
 // One image's marginal profile (weighted mean of channel per elevation/azimuth bin, NaN where empty)
 function _dsImageProfile(r, isElev, DX, DY, ch, valign, halign, HM) {
+  const BAND = _dsBand();
   const g = r.spatial.grid, GX = r.spatial.gridX, GY = r.spatial.gridY;
   let minCY = GY, maxCY = 0; g.forEach(o => { if (o.cell_y < minCY) minCY = o.cell_y; if (o.cell_y > maxCY) maxCY = o.cell_y; });
   const yLo = (minCY + 0.5) / GY, yHi = (maxCY + 0.5) / GY, yRange = (yHi - yLo) || 1;
@@ -2405,7 +2540,7 @@ function _dsImageProfile(r, isElev, DX, DY, ch, valign, halign, HM) {
   const N = isElev ? DY : DX, sv = new Float64Array(N), sn = new Float64Array(N);
   for (const o of g) {
     let fx = (o.cell_x + 0.5) / GX + shift; fx = ((fx % 1) + 1) % 1;
-    let fy = (o.cell_y + 0.5) / GY; if (valign === 'mask') fy = (fy - yLo) / yRange; fy = Math.min(0.999, Math.max(0, fy));
+    let fy = (o.cell_y + 0.5) / GY; fy = _fyAdj(fy, valign, yLo, yRange, BAND); fy = Math.min(0.999, Math.max(0, fy));
     const v = cellChanVal(o, ch); if (v == null || !isFinite(v)) continue;
     const k = isElev ? Math.min(DY - 1, Math.floor(fy * DY)) : Math.min(DX - 1, Math.floor(fx * DX));
     sv[k] += v * o.n; sn[k] += o.n;
@@ -2415,11 +2550,13 @@ function _dsImageProfile(r, isElev, DX, DY, ch, valign, halign, HM) {
 }
 // Aggregate every image's grid into a common DX×DY dataset grid, with registration
 function dsSpatialData() {
-  const s = window._dsState, ch = s.channelSp || 'b', valign = s.valign || 'mask', halign = s.halign || 'none';
+  const s = window._dsState, ch = s.channelSp || 'b', valign = s.valign || 'fixed', halign = s.halign || 'none';
+  const BAND = _dsBand();
   const res = (window._results || []).filter(r => r.spatial && r.spatial.grid && r.spatial.grid.length);
   if (!res.length) return null;
   let DX = 1, DY = 1; res.forEach(r => { DX = Math.max(DX, r.spatial.gridX); DY = Math.max(DY, r.spatial.gridY); });
   DX = Math.min(DX, 48); DY = Math.min(DY, 32);
+  if (valign !== 'canvas') DY = Math.max(2, Math.min(DY, Math.round(DY * BAND.span)));  // one target row per occupied source row — otherwise the remap skips bins
   const HM = (halign === 'north' || halign === 'sun') ? _headingMap() : {};
   const N = DX * DY;
   const sum = new Float64Array(N), sum2 = new Float64Array(N), cnt = new Float64Array(N), dens = new Float64Array(N);
@@ -2432,7 +2569,7 @@ function dsSpatialData() {
     if (halign !== 'none' && sh.ok) aligned++;
     for (const o of g) {
       let fx = (o.cell_x + 0.5) / GX + shift; fx = ((fx % 1) + 1) % 1;
-      let fy = (o.cell_y + 0.5) / GY; if (valign === 'mask') fy = (fy - yLo) / yRange;
+      let fy = (o.cell_y + 0.5) / GY; fy = _fyAdj(fy, valign, yLo, yRange, BAND);
       fy = Math.min(0.999, Math.max(0, fy));
       const di = Math.min(DY - 1, Math.floor(fy * DY)) * DX + Math.min(DX - 1, Math.floor(fx * DX));
       const v = cellChanVal(o, ch); if (v == null || !isFinite(v)) continue;
@@ -2441,7 +2578,7 @@ function dsSpatialData() {
     for (const c of (r.clusters || [])) {
       if (c.centroid_x_rel == null) continue;
       let fx = c.centroid_x_rel + shift; fx = ((fx % 1) + 1) % 1;
-      let fy = c.centroid_y_rel; if (valign === 'mask') fy = (fy - yLo) / yRange; fy = Math.min(0.999, Math.max(0, fy));
+      let fy = c.centroid_y_rel; fy = _fyAdj(fy, valign, yLo, yRange, BAND); fy = Math.min(0.999, Math.max(0, fy));
       dens[Math.min(DY - 1, Math.floor(fy * DY)) * DX + Math.min(DX - 1, Math.floor(fx * DX))] += (c.weighted_count != null ? c.weighted_count : c.pixel_count);
     }
   }
@@ -2457,10 +2594,12 @@ function drawRampLegend(ctx, x, y, h, vmin, vmax) {
 function _median(a) { const s = a.slice().sort((x, y) => x - y); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; }
 // Per-position arrays of each image's mean channel value (for median/SD/Moran's across images) + pooled colour
 function dsCellArrays(ch, valign, halign) {
+  const BAND = _dsBand();
   const res = (window._results || []).filter(r => r.spatial && r.spatial.grid && r.spatial.grid.length);
   if (!res.length) return null;
   let DX = 1, DY = 1; res.forEach(r => { DX = Math.max(DX, r.spatial.gridX); DY = Math.max(DY, r.spatial.gridY); });
   DX = Math.min(DX, 48); DY = Math.min(DY, 32);
+  if (valign !== 'canvas') DY = Math.max(2, Math.min(DY, Math.round(DY * BAND.span)));  // one target row per occupied source row — otherwise the remap skips bins
   const HM = (halign === 'north' || halign === 'sun') ? _headingMap() : {};
   const N = DX * DY, cellVals = Array.from({ length: N }, () => []);
   const cr = new Float64Array(N), cg = new Float64Array(N), cb = new Float64Array(N), cn = new Float64Array(N);
@@ -2472,7 +2611,7 @@ function dsCellArrays(ch, valign, halign) {
     const iSum = new Float64Array(N), iN = new Float64Array(N);
     for (const o of g) {
       let fx = (o.cell_x + 0.5) / GX + shift; fx = ((fx % 1) + 1) % 1;
-      let fy = (o.cell_y + 0.5) / GY; if (valign === 'mask') fy = (fy - yLo) / yRange; fy = Math.min(0.999, Math.max(0, fy));
+      let fy = (o.cell_y + 0.5) / GY; fy = _fyAdj(fy, valign, yLo, yRange, BAND); fy = Math.min(0.999, Math.max(0, fy));
       const di = Math.min(DY - 1, Math.floor(fy * DY)) * DX + Math.min(DX - 1, Math.floor(fx * DX));
       cr[di] += o.mean_r * o.n; cg[di] += o.mean_g * o.n; cb[di] += o.mean_b * o.n; cn[di] += o.n;
       const v = cellChanVal(o, ch); if (v == null || !isFinite(v)) continue;
@@ -2505,6 +2644,43 @@ function _vizSub(ctx, text) { if (!text) return; ctx.fillStyle = '#8a97a6'; ctx.
 // Geometry-appropriate degree labels (generic — not sky-specific)
 function _polarEnds(proj) { const rim = Math.round(((proj && proj.fov) || 180) / 2); return ['0°', rim + '°']; }          // disk: centre 0° → edge angle
 function _elevEnds(proj) { return (proj && proj.type === 'equirect') ? [proj.top + '°', proj.bottom + '°'] : ['top', 'bottom']; }  // equirect: top/bottom elevation
+
+/* ── Vertical alignment across a dataset ───────────────────────────────
+   'canvas'  raw frame position — the whole frame, including any part with no data
+   'fixed'   the dataset's COMMON occupied band (default). One identical transform
+             for every image, so geometry is preserved exactly, but the composite
+             spends all of its rows on the part of the frame that holds data.
+   'mask'    each image normalised to its own extent. Only appropriate when frames
+             genuinely differ (varying crop or mount height) — it destroys absolute
+             elevation and can leave empty rows where the stretch skips bins.        */
+let _bandCache = null, _bandFor = null;
+function _dsBand() {
+  const res = (window._results || []).filter(r => r.spatial && r.spatial.grid && r.spatial.grid.length);
+  if (_bandFor === window._results && _bandCache) return _bandCache;
+  let lo = 1, hi = 0;
+  for (const r of res) {
+    const GY = r.spatial.gridY; let a = GY, b = 0;
+    r.spatial.grid.forEach(o => { if (o.cell_y < a) a = o.cell_y; if (o.cell_y > b) b = o.cell_y; });
+    lo = Math.min(lo, a / GY); hi = Math.max(hi, (b + 1) / GY);
+  }
+  if (!(hi > lo)) { lo = 0; hi = 1; }
+  const out = { lo, hi, span: (hi - lo) || 1 };
+  _bandFor = window._results; _bandCache = out;
+  return out;
+}
+function _fyAdj(fy, valign, yLo, yRange, band) {
+  if (valign === 'mask') return (fy - yLo) / yRange;
+  if (valign === 'canvas') return fy;
+  return (fy - band.lo) / band.span;                     // 'fixed' — common extent
+}
+// Axis end labels for the extent actually plotted, in the projection's own degrees.
+function _elevLabels(proj, valign, band) {
+  if (valign === 'mask') return ['normalised', 'per-image extent'];
+  if (!(proj && proj.type === 'equirect')) return ['top', 'bottom'];
+  const lo = (valign === 'canvas') ? 0 : band.lo, hi = (valign === 'canvas') ? 1 : band.hi;
+  const at = f => Math.round((proj.top + (proj.bottom - proj.top) * f) * 10) / 10;
+  return [at(lo) + '°', at(hi) + '°'];
+}
 // DX angular × DY radial field as a polar annulus (ring 0 = centre, outer = edge)
 function drawPolarField(ctx, W, H, DX, DY, colFn, centreLabel, rimLabel) {
   const cx = W / 2, cy = H / 2 + 15, Rmax = Math.min(W, H) / 2 - 28;
@@ -2542,13 +2718,14 @@ function renderDatasetSpatial(ctx, W, H) {
       ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
       ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('← azimuth →', mL + plotW / 2, mT + plotH + 15);
-      const ee = _elevEnds((window._results[0] || {}).proj); ctx.save(); ctx.translate(mL + 9, mT + plotH / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(`${ee[1]} (bottom) … ${ee[0]} (top)`, 0, 0); ctx.restore();
+      const ee = _elevLabels((window._results[0] || {}).proj, d.valign, _dsBand()); ctx.save(); ctx.translate(mL + 9, mT + plotH / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(`${ee[1]} (bottom) … ${ee[0]} (top)`, 0, 0); ctx.restore();
       ctx.textAlign = 'left'; drawRampLegend(ctx, mL + plotW + 12, mT, plotH, vmin, vmax);
     }
     return;
   }
   // Colour profile strips (mean or median sky colour per elevation/azimuth bin), rectangular or polar
   const isElev = kind === 'dselev', NN = isElev ? DY : DX;
+  const BAND = _dsBand();
   const HM = (d.halign === 'north' || d.halign === 'sun') ? _headingMap() : {};
   const resP = (window._results || []).filter(r => r.spatial && r.spatial.grid && r.spatial.grid.length);
   const binR = Array.from({ length: NN }, () => []), binG = Array.from({ length: NN }, () => []), binB = Array.from({ length: NN }, () => []);
@@ -2560,7 +2737,7 @@ function renderDatasetSpatial(ctx, W, H) {
     const sR = new Float64Array(NN), sG = new Float64Array(NN), sB = new Float64Array(NN), sN = new Float64Array(NN);
     for (const o of g) {
       let fx = (o.cell_x + 0.5) / GX + shift; fx = ((fx % 1) + 1) % 1;
-      let fy = (o.cell_y + 0.5) / GY; if (d.valign === 'mask') fy = (fy - yLo) / yRange; fy = Math.min(0.999, Math.max(0, fy));
+      let fy = (o.cell_y + 0.5) / GY; fy = _fyAdj(fy, d.valign, yLo, yRange, BAND); fy = Math.min(0.999, Math.max(0, fy));
       const k = isElev ? Math.min(DY - 1, Math.floor(fy * DY)) : Math.min(DX - 1, Math.floor(fx * DX));
       sR[k] += o.mean_r * o.n; sG[k] += o.mean_g * o.n; sB[k] += o.mean_b * o.n; sN[k] += o.n;
     }
@@ -2581,7 +2758,7 @@ function renderDatasetSpatial(ctx, W, H) {
   }
   const mT = 34, mB = 20, mLx = isElev ? 54 : 8, mRx = 8, plotW = W - mLx - mRx, plotH = H - mT - mB;
   if (isElev) { const bh = plotH / NN; for (let k = 0; k < NN; k++) { const c = colAt(k); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mLx, mT + k * bh, plotW, Math.ceil(bh)); }
-    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH); const ee = _elevEnds((window._results[0] || {}).proj); ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillText(ee[0], mLx - 6, mT + 9); ctx.fillText(ee[1], mLx - 6, mT + plotH - 1); ctx.textAlign = 'left'; }
+    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH); const ee = _elevLabels((window._results[0] || {}).proj, d.valign, _dsBand()); ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillText(ee[0], mLx - 6, mT + 9); ctx.fillText(ee[1], mLx - 6, mT + plotH - 1); ctx.textAlign = 'left'; }
   else { const bw = plotW / NN; for (let k = 0; k < NN; k++) { const c = colAt(k); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mLx + k * bw, mT, Math.ceil(bw), plotH); }
     ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH); ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.halign === 'none' ? '← azimuth →' : '← azimuth (aligned to ' + d.halign + ') →', mLx + plotW / 2, mT + plotH + 14); ctx.textAlign = 'left'; }
 }
@@ -3038,6 +3215,24 @@ function updateProjUI() {
   if (cf) cf.style.display = (conv && (ct || {}).value !== 'equirect') ? '' : 'none';
   const eb = document.getElementById('convBtn'), ox = document.getElementById('convOutPx');   // export only makes sense with a convert target
   if (eb) eb.disabled = !conv; if (ox) ox.disabled = !conv;
+  // Auto-derive the target disk's angular diameter from the source elevation range (zenith-centred: edge = 2·(top − bottom))
+  const convDisk = conv && (ct || {}).value !== 'equirect';
+  if (convDisk && t === 'equirect') {
+    const cvf = document.getElementById('convFov');
+    const top = parseFloat((document.getElementById('projTop') || {}).value), bot = parseFloat((document.getElementById('projBottom') || {}).value);
+    if (cvf && isFinite(top) && isFinite(bot)) cvf.value = Math.max(1, Math.min(360, Math.round(2 * (top - bot))));
+  }
+  // Polar spatial is only meaningful on a disk/azimuthal analysis frame
+  const analysedType = conv ? (ct || {}).value : t;
+  const frameIsDisk = analysedType && analysedType !== 'equirect';
+  const sm = document.getElementById('spatialMode'), hint = document.getElementById('spatialHint');
+  if (sm) {
+    const polarOpt = sm.querySelector('option[value="polar"]');
+    if (polarOpt) polarOpt.disabled = !frameIsDisk;
+    if (!frameIsDisk && sm.value === 'polar') sm.value = 'cartesian';
+    if (hint) hint.textContent = frameIsDisk ? '' : 'polar needs a disk frame';
+  }
+  if (typeof updateProjPreview === 'function') updateProjPreview();
 }
 function toggleProjInfo(e) { if (e) { e.preventDefault(); e.stopPropagation(); } const el = document.getElementById('projInfo'); if (el) el.style.display = el.style.display === 'none' ? '' : 'none'; }
 window.addEventListener('DOMContentLoaded', updateModeUI);
@@ -3096,7 +3291,20 @@ async function updateProjPreview() {
   const off = document.createElement('canvas'); off.width = dw; off.height = dh; const octx = off.getContext('2d');
   const id = octx.createImageData(dw, dh); id.data.set(out); octx.putImageData(id, 0, 0);
   ctx.clearRect(0, 0, cv.width, cv.height);
-  ctx.drawImage(off, Math.round((cv.width - dw) / 2), Math.round((cv.height - dh) / 2));
+  const ox = Math.round((cv.width - dw) / 2), oy = Math.round((cv.height - dh) / 2);
+  ctx.drawImage(off, ox, oy);
+  // Overlays: mark the horizon (0° elevation) and the angular extent so the mapping is verifiable
+  ctx.font = '9px sans-serif';
+  if (!disk) {
+    const denom = (target.bottom - target.top) || 1, vHor = (0 - target.top) / denom;
+    if (vHor >= 0 && vHor <= 1) { const yH = oy + vHor * dh; ctx.strokeStyle = 'rgba(192,57,43,0.75)'; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(ox, yH); ctx.lineTo(ox + dw, yH); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#c0392b'; ctx.fillText('horizon 0°', ox + 3, yH - 2); }
+    ctx.fillStyle = '#5a6b7d'; ctx.fillText(target.top + '° (top)', ox + 3, oy + 10); ctx.textAlign = 'left'; ctx.fillText(target.bottom + '° (bottom)', ox + 3, oy + dh - 3);
+  } else {
+    const law = _projLaw(target.type), tMax = _thetaMax(target), ccx = ox + dw / 2, ccy = oy + dh / 2, R = dh / 2;
+    const rnHor = _rho(law, Math.PI / 2) / (_rho(law, tMax) || 1);
+    if (rnHor <= 1) { ctx.strokeStyle = 'rgba(192,57,43,0.6)'; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.arc(ccx, ccy, rnHor * R, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#c0392b'; ctx.textAlign = 'center'; ctx.fillText('horizon 0°', ccx, ccy - rnHor * R - 2); }
+    ctx.fillStyle = '#5a6b7d'; ctx.textAlign = 'center'; ctx.fillText('centre 90°', ccx, ccy + 3); ctx.fillText('rim ' + (90 - Math.round(tMax * 180 / Math.PI)) + '°', ccx, oy + dh - 3); ctx.textAlign = 'left';
+  }
   ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(0.5, 0.5, cv.width - 1, cv.height - 1);
 }
 function applyPreset(name, btn) {
