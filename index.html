@@ -542,6 +542,7 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
     <input type="file" id="folderInput" webkitdirectory style="display:none">
     <div class="file-pill-row" id="filePills"></div>
     <div id="preflight"></div>
+    <div id="pfModal"></div>
 
     <div class="field" style="margin-top:0.8rem">
       <label for="imageUrl">Image URLs (optional, one per line)</label>
@@ -752,6 +753,25 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
                   <option value="polar">Polar (rings × wedges)</option>
                 </select>
                 <span class="hint" id="spatialHint" style="margin:0"></span>
+              </div>
+              <div class="cfg-row" style="gap:.4rem">
+                <span class="hint" style="margin:0">Extent</span>
+                <select id="cfgExtent" class="proj-sel" title="What every visualization covers: the occupied band (rows that actually contain data) or the full frame including empty rows." onchange="setDsExtent(this.value)">
+                  <option value="band">Occupied band</option>
+                  <option value="full">Full frame</option>
+                </select>
+                <span class="hint" style="margin:0">Vert</span>
+                <select id="cfgValign" class="proj-sel" title="Shared = one transform for every image, so absolute position is comparable. Per-image = each frame normalised to its own extent; only for sets whose frames genuinely differ." onchange="setDsValign(this.value)">
+                  <option value="fixed">Shared (absolute)</option>
+                  <option value="mask">Per-image (normalised)</option>
+                </select>
+                <span class="hint" style="margin:0">Azimuth</span>
+                <select id="cfgHalign" class="proj-sel" title="Rotate frames to a common bearing before compositing. Use none for a fixed camera — its frames are already registered." onchange="setDsHalign(this.value)">
+                  <option value="none">none</option>
+                  <option value="bright">brightest col</option>
+                  <option value="north">compass N</option>
+                  <option value="sun">sun</option>
+                </select>
               </div>
               <div class="cfg-row" style="gap:.4rem">
                 <span class="hint" style="margin:0">Export</span>
@@ -1472,7 +1492,7 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
     c.centroid_x_rel = Math.round(cx / w * 1000) / 1000; c.centroid_y_rel = Math.round(cy / h * 1000) / 1000;
     c.spatial_spread_rel = Math.round(spread / diag * 1000) / 1000; });
 
-  return { rows, cols, grid, morans, morans_channels: chans, gridX: GX, gridY: GY };
+  return { rows, cols, grid, morans, morans_channels: chans, gridX: GX, gridY: GY, srcW: w, srcH: h };
 }
 
 // Polar spatial: GX angular wedges (azimuth) × GY radial rings (elevation, centre→rim).
@@ -1808,67 +1828,120 @@ async function runPreflight() {
   const lo = Math.min(...los), hi = Math.max(...his);
   const spread = Math.max(Math.max(...los) - Math.min(...los), Math.max(...his) - Math.min(...his));
   const uniqueCoords = new Set(coords).size;
+  const prev = _pfState;
   _pfState = { n: queuedFiles.length, sampled: sample.length, sameDim, dims: dims[0], shape, lo, hi, spread, withAlpha, uniqueCoords, hasGps: coords.length > 0 };
   el.innerHTML = _pfHtml(_pfState);
+  // open once per distinct set of imagery, not on every file added
+  const sig = [_pfState.dims.join('x'), _pfState.shape, Math.round(_pfState.lo * 100), Math.round(_pfState.hi * 100), _pfState.uniqueCoords].join('|');
+  if (sig !== (prev && prev._sig)) { _pfState._sig = sig; openPreflight(); } else { _pfState._sig = sig; }
 }
 function _pfDeg(f) {
   const t = parseFloat((document.getElementById('projTop') || {}).value), b = parseFloat((document.getElementById('projBottom') || {}).value);
   if (!isFinite(t) || !isFinite(b)) return null;
   return Math.round((t + (b - t) * f) * 10) / 10;
 }
-function _pfHtml(p) {
-  const row = (state, text, btn) =>
-    `<div style="display:flex;gap:.5rem;align-items:flex-start;padding:.3rem 0;font-size:.72rem;line-height:1.45">
-       <span style="flex:0 0 auto">${state === 'ok' ? '✓' : state === 'warn' ? '▲' : 'ℹ'}</span>
-       <span style="flex:1 1 auto;color:#3d4a5c">${text}</span>${btn || ''}</div>`;
-  const b = (fn, lab) => `<button class="btn btn-outline btn-sm" style="flex:0 0 auto;font-size:.68rem;padding:.15rem .45rem" onclick="${fn}">${lab}</button>`;
-  const rows = [];
+function _pfFindings(p) {
+  const f = [];
+  f.push({ id: 'proj', state: p.shape === 'equirect' ? 'ok' : (p.shape === 'disk' ? 'ok' : 'warn'),
+    title: p.shape === 'equirect' ? `2:1 frame (${p.dims[0]}×${p.dims[1]}) — equirectangular`
+         : p.shape === 'disk' ? `Square frame (${p.dims[0]}×${p.dims[1]}) — a disk projection`
+         : `Frame is ${p.dims[0]}×${p.dims[1]} — neither 2:1 nor square`,
+    detail: p.shape === 'equirect' ? 'A full sphere spans 90° at the top row to −90° at the bottom. This range drives the cos(elevation) weighting, so it has to match the image.'
+          : p.shape === 'disk' ? 'Set the input projection and full angle to match the lens. Nothing to apply automatically.'
+          : 'This is probably a crop. Whatever elevation range you set must be the crop’s true vertical extent, not the sphere’s — otherwise every weighted statistic is biased.',
+    action: p.shape === 'equirect' ? { label: 'Set equirectangular, 90 / −90', fn: 'pfApplyEquirect' } : null });
 
-  // 1 — shape → projection and elevation range
-  if (p.shape === 'equirect')
-    rows.push(row('ok', `<b>2:1 frame</b> (${p.dims[0]}×${p.dims[1]}) — equirectangular. Elevation should be <b>90 / −90</b> for a full sphere.`,
-      b('pfApplyEquirect()', 'Set')));
-  else if (p.shape === 'disk')
-    rows.push(row('ok', `<b>Square frame</b> (${p.dims[0]}×${p.dims[1]}) — a disk projection (fisheye, tiny-planet or azimuthal). Set the input projection and full angle to match the lens.`, ''));
-  else
-    rows.push(row('warn', `<b>Frame is ${aspectStr(p)}</b> — neither 2:1 nor square, so it is probably a crop. Whatever elevation range you set must be the crop's true vertical extent, not the sphere's.`, ''));
-
-  // 2 — occupied extent
   if (p.withAlpha) {
-    const pctOcc = Math.round((p.hi - p.lo) * 100);
+    const pct = Math.round((p.hi - p.lo) * 100);
     const d0 = _pfDeg(p.lo), d1 = _pfDeg(p.hi);
-    const degTxt = (d0 != null && p.shape === 'equirect') ? ` — about <b>${d0}°</b> to <b>${d1}°</b>` : '';
-    rows.push(row(pctOcc < 90 ? 'warn' : 'ok',
-      `<b>Data occupies ${pctOcc}% of the frame</b>${degTxt}; the rest is transparent. Dataset composites use <i>common extent</i> alignment, so they cover only this band and no rows are wasted.`,
-      pctOcc < 90 ? b('pfApplyGrid()', 'Raise grid') : ''));
+    const occ = Math.max(0.05, p.hi - p.lo), gy = Math.max(8, Math.min(64, Math.round(24 / occ)));
+    f.push({ id: 'grid', state: pct < 90 ? 'warn' : 'ok',
+      title: `Data occupies ${pct}% of the frame` + ((d0 != null && p.shape === 'equirect') ? ` — about ${d0}° to ${d1}°` : ''),
+      detail: pct < 90 ? `The rest is transparent. Visualizations follow the shared Extent control, set to “occupied band”, so no rows are wasted. Raising grid rows to ${gy} gives the occupied band roughly 24 rows of detail.`
+                       : 'Nearly the whole frame carries data.',
+      action: pct < 90 ? { label: `Set grid rows to ${gy}`, fn: 'pfApplyGrid' } : null });
   } else {
-    rows.push(row('ok', 'No transparency — the whole frame carries data.', ''));
+    f.push({ id: 'grid', state: 'ok', title: 'No transparency', detail: 'The whole frame carries data.', action: null });
   }
 
-  // 3 — consistency across the set
   if (!p.sameDim)
-    rows.push(row('warn', '<b>Images differ in size.</b> Composites will be misregistered unless every frame shares one coordinate system. Re-export them on a common canvas.', ''));
+    f.push({ id: 'valign', state: 'warn', title: 'Images differ in size',
+      detail: 'Composites will be misregistered unless every frame shares one coordinate system. Re-export them on a common canvas before relying on any dataset-level figure.', action: null });
   else if (p.spread > 0.02)
-    rows.push(row('warn', `<b>The data extent varies between images</b> (by up to ${Math.round(p.spread * 100)}% of frame height). Per-image alignment is the safer choice here.`,
-      b("pfApplyValign('mask')", 'Use per-image')));
+    f.push({ id: 'valign', state: 'warn', title: `Data extent varies between images by up to ${Math.round(p.spread * 100)}% of frame height`,
+      detail: 'Absolute position is not comparable across the set, so each frame should be normalised to its own extent.',
+      action: { label: 'Vertical: per-image', fn: "pfApplyValign('mask')" } });
   else
-    rows.push(row('ok', `Frames share one size and a consistent data extent (varying by under ${Math.max(1, Math.round(p.spread * 100))}%), so absolute position is comparable across the set.`,
-      b("pfApplyValign('fixed')", 'Use common')));
+    f.push({ id: 'valign', state: 'ok', title: `Frames share one size and a consistent extent (varying by under ${Math.max(1, Math.round(p.spread * 100))}%)`,
+      detail: 'Absolute position is comparable, so one shared transform can be used for every image and elevation stays meaningful.',
+      action: { label: 'Vertical: shared', fn: "pfApplyValign('fixed')" } });
 
-  // 4 — stationary or moving → azimuth registration
   if (!p.hasGps)
-    rows.push(row('info', 'No GPS in the sampled files, so compass and sun azimuth registration are unavailable. Use <i>none</i> for a fixed camera, or <i>brightest column</i> otherwise.', b("pfApplyHalign('none')", 'Azimuth: none')));
+    f.push({ id: 'halign', state: 'info', title: 'No GPS in the sampled files',
+      detail: 'Compass and sun registration are unavailable. Use none for a fixed camera, or brightest column to align frames on the sun.',
+      action: { label: 'Azimuth: none', fn: "pfApplyHalign('none')" } });
   else if (p.uniqueCoords === 1)
-    rows.push(row('ok', '<b>All sampled frames share one location</b> — a fixed camera, so the frames are already registered and azimuth is true bearing. Rotating them would destroy that.',
-      b("pfApplyHalign('none')", 'Azimuth: none')));
+    f.push({ id: 'halign', state: 'ok', title: 'All sampled frames share one location — a fixed camera',
+      detail: 'The frames are already registered and the horizontal axis is true bearing. Rotating them to a common column would destroy that.',
+      action: { label: 'Azimuth: none', fn: "pfApplyHalign('none')" } });
   else
-    rows.push(row('info', `<b>${p.uniqueCoords} distinct locations</b> in the sample — a moving capture. Compass-N registration is available and will align frames to true bearing.`,
-      b("pfApplyHalign('north')", 'Azimuth: compass N')));
-
-  return `<div style="border:1px solid #dde8ed;border-radius:6px;padding:.5rem .7rem;margin:.5rem 0;background:#fafcfd">
-      <div style="font-size:.72rem;font-weight:600;color:#1a2332;margin-bottom:.15rem">Data check
-        <span style="font-weight:400;color:#6b7a8d">— ${p.sampled} of ${p.n} file(s) sampled. Nothing is changed until you apply it.</span></div>
-      ${rows.join('')}</div>`;
+    f.push({ id: 'halign', state: 'info', title: `${p.uniqueCoords} distinct locations in the sample — a moving capture`,
+      detail: 'Frames point in different directions, so they need rotating to a common bearing before they can be composited.',
+      action: { label: 'Azimuth: compass N', fn: "pfApplyHalign('north')" } });
+  return f;
+}
+function openPreflight() {
+  const p = _pfState, host = document.getElementById('pfModal');
+  if (!p || !host) return;
+  const F = _pfFindings(p); window._pfList = F;
+  const ico = { ok: '✓', warn: '▲', info: 'ℹ' };
+  const rows = F.map((f, i) => `
+    <div style="padding:.6rem 0;border-top:1px solid #eef3f6">
+      <div style="font-size:.82rem;font-weight:600;color:#1a2332">${ico[f.state]} ${f.title}</div>
+      <div style="font-size:.75rem;color:#54626f;line-height:1.5;margin:.2rem 0 .4rem">${f.detail}</div>
+      ${f.action ? `<label style="font-size:.75rem;margin-right:1rem"><input type="radio" name="pf${i}" value="apply" checked> ${f.action.label}</label>
+                    <label style="font-size:.75rem"><input type="radio" name="pf${i}" value="skip"> Leave as is</label>`
+                 : `<span style="font-size:.72rem;color:#8a97a4">Nothing to apply — set this yourself if it matters.</span>`}
+    </div>`).join('');
+  host.innerHTML = `
+    <div id="pfBackdrop" style="position:fixed;inset:0;background:rgba(18,28,38,.45);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1.5rem">
+      <div role="dialog" aria-modal="true" style="background:#fff;border-radius:10px;max-width:680px;width:100%;max-height:86vh;overflow:auto;box-shadow:0 18px 50px rgba(0,0,0,.28);padding:1.1rem 1.3rem">
+        <div style="font-size:1rem;font-weight:700;color:#1a2332">Data check</div>
+        <div style="font-size:.75rem;color:#6b7a8d;margin:.15rem 0 .5rem">${p.sampled} of ${p.n} queued file(s) sampled. Choose what to apply — nothing changes until you confirm.</div>
+        ${rows}
+        <div id="pfSummary" style="display:none;font-size:.75rem;background:#f2f8f4;border-left:3px solid #4a9d6a;color:#2c5f42;padding:.5rem .65rem;border-radius:0 4px 4px 0;margin-top:.7rem"></div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.9rem">
+          <button class="btn btn-outline btn-sm" onclick="closePreflight()">Close</button>
+          <button class="btn btn-sm" id="pfApplyBtn" onclick="applyPreflight()">Apply selections</button>
+        </div>
+      </div>
+    </div>`;
+}
+function closePreflight() { const h = document.getElementById('pfModal'); if (h) h.innerHTML = ''; }
+function applyPreflight() {
+  const F = window._pfList || [], done = [];
+  F.forEach((f, i) => {
+    if (!f.action) return;
+    const sel = document.querySelector(`input[name="pf${i}"]:checked`);
+    if (!sel || sel.value !== 'apply') return;
+    try { (0, eval)(f.action.fn + (f.action.fn.endsWith(')') ? '' : '()')); done.push(f.action.label); } catch (e) {}
+  });
+  const box = document.getElementById('pfSummary');
+  if (box) {
+    box.style.display = 'block';
+    box.innerHTML = done.length
+      ? '<b>Applied:</b> ' + done.join(' · ') + '. Current settings — extent <b>' + (window._dsState.extent) + '</b>, vertical <b>' + (window._dsState.valign) + '</b>, azimuth <b>' + (window._dsState.halign) + '</b>.'
+      : 'Nothing applied. Settings are unchanged.';
+  }
+  const b = document.getElementById('pfApplyBtn'); if (b) b.textContent = 'Apply again';
+}
+function _pfHtml(p) {
+  const bad = _pfFindings(p).filter(f => f.state === 'warn').length;
+  return `<div style="display:flex;align-items:center;gap:.6rem;border:1px solid #dde8ed;border-radius:6px;padding:.45rem .7rem;margin:.5rem 0;background:#fafcfd;font-size:.75rem">
+      <span style="font-weight:600;color:#1a2332">Data check</span>
+      <span style="color:#6b7a8d;flex:1 1 auto">${p.sampled} of ${p.n} file(s) sampled${bad ? ` · <b style="color:#b26a00">${bad} thing${bad === 1 ? '' : 's'} to decide</b>` : ' · nothing looks wrong'}</span>
+      <button class="btn btn-outline btn-sm" style="font-size:.7rem" onclick="openPreflight()">Review${bad ? ' & apply' : ''}</button>
+    </div>`;
 }
 function aspectStr(p) { return `${p.dims[0]}×${p.dims[1]}`; }
 function _pfLog(msg) { try { log('Data check: ' + msg); } catch (e) {} }
@@ -2346,7 +2419,7 @@ function renderSwatches(clusters) {
 const HIST_MODES = { hue: 'Hue', sat: 'Saturation', val: 'Value' };
 
 // ── Dataset visualizations (histogram, aggregate palette, metric distribution) ──
-window._dsState = { kind: 'hist', channel: 'hue', metric: 'colourfulness', channelSp: 'b', valign: 'fixed', halign: 'none', gridMeasure: 'mean', geom: 'auto' };
+window._dsState = { kind: 'hist', channel: 'hue', metric: 'colourfulness', channelSp: 'b', valign: 'fixed', halign: 'none', gridMeasure: 'mean', geom: 'auto', extent: 'band' };
 function dsCanvas() { return document.getElementById('ds-canvas'); }
 function dsMetricOptions() {
   const opts = [['colourfulness', 'colourfulness'], ['redness', 'redness'], ['cct', 'CCT'], ['rms_contrast', 'RMS contrast'], ['dark_channel', 'dark-channel'],
@@ -2451,17 +2524,26 @@ const DS_CHANNELS = [['b', 'b*'], ['L', 'L*'], ['C', 'C*ab'], ['S', 'saturation'
   ['R', 'R'], ['G', 'G'], ['B', 'B']];
 function dsChanLabel(ch) { const o = DS_CHANNELS.find(x => x[0] === ch); return o ? o[1] : ch; }
 function setDsChannelSp(v) { window._dsState.channelSp = v; drawDatasetViz(); }
-function setDsValign(v) { window._dsState.valign = v; drawDatasetViz(); }
-function setDsHalign(v) { window._dsState.halign = v; drawDatasetViz(); }
+function setDsValign(v) { window._dsState.valign = v; _syncCfgAlign(); drawDatasetViz(); redrawAllViz(); }
+function setDsExtent(v) { window._dsState.extent = v; _syncCfgAlign(); drawDatasetViz(); redrawAllViz(); }
+function setDsHalign(v) { window._dsState.halign = v; _syncCfgAlign(); drawDatasetViz(); }
 function setDsGridMeasure(v) { window._dsState.gridMeasure = v; drawDatasetViz(); }
 function setDsGeom(v) { window._dsState.geom = v; drawDatasetViz(); }
+function _syncCfgAlign() {
+  const st = window._dsState, set = (id, v) => { const el = document.getElementById(id); if (el && el.value !== v) el.value = v; };
+  set('cfgExtent', st.extent || 'band'); set('cfgValign', st.valign || 'fixed'); set('cfgHalign', st.halign || 'none');
+}
+function redrawAllViz() {
+  for (const r of (window._results || [])) { try { drawViz(r.id); } catch (e) {} }
+}
 function _resultsPolar() { const r = (window._results || [])[0]; return !!(r && r.spatial && r.spatial.polar); }
 function _geomIsPolar() { const g = window._dsState.geom || 'auto'; return g === 'polar' || (g === 'auto' && _resultsPolar()); }
 function dsSpatialControlsHtml(kind) {
   const s = window._dsState, fs = 'font-size:0.72rem';
   const mk = (setter, val, opts) => `<select style="${fs}" onchange="${setter}(this.value)">` + opts.map(o => `<option value="${o[0]}" ${val === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
   const chSel = mk('setDsChannelSp', s.channelSp || 'b', DS_CHANNELS);
-  const vSel = mk('setDsValign', s.valign || 'fixed', [['fixed', 'common extent'], ['canvas', 'full frame'], ['mask', 'per-image']]);
+  const vSel = mk('setDsValign', s.valign || 'fixed', [['fixed', 'shared (absolute)'], ['mask', 'per-image (normalised)']]);
+  const eSel = mk('setDsExtent', s.extent || 'band', [['band', 'occupied band'], ['full', 'full frame']]);
   const hSel = mk('setDsHalign', s.halign || 'none', [['none', 'none'], ['bright', 'brightest col'], ['north', 'compass N'], ['sun', 'sun']]);
   const measSel = mk('setDsGridMeasure', s.gridMeasure || 'mean', [['mean', 'mean'], ['median', 'median'], ['sd', 'SD / variability'], ['lisa', "local Moran's I"]]);
   const geomSel = mk('setDsGeom', s.geom || 'auto', [['auto', 'auto'], ['rect', 'rectangular'], ['polar', 'polar']]);
@@ -2469,7 +2551,7 @@ function dsSpatialControlsHtml(kind) {
   const parts = [];
   if (kind === 'dsgrid') { parts.push(lab('channel:', chSel), lab('measure:', measSel), lab('geom:', geomSel)); }
   else if (kind === 'dselev' || kind === 'dsazim') { parts.push(lab('measure:', mk('setDsGridMeasure', s.gridMeasure || 'mean', [['mean', 'mean colour'], ['median', 'median colour']])), lab('geom:', geomSel)); }
-  parts.push(lab('vert:', vSel), lab('azimuth:', hSel));
+  parts.push(lab('extent:', eSel), lab('vert:', vSel), lab('azimuth:', hSel));
   return parts.join(' ');
 }
 // Bearing (deg from north) between two lat/lon points
@@ -2555,8 +2637,8 @@ function dsSpatialData() {
   const res = (window._results || []).filter(r => r.spatial && r.spatial.grid && r.spatial.grid.length);
   if (!res.length) return null;
   let DX = 1, DY = 1; res.forEach(r => { DX = Math.max(DX, r.spatial.gridX); DY = Math.max(DY, r.spatial.gridY); });
-  DX = Math.min(DX, 48); DY = Math.min(DY, 32);
-  if (valign !== 'canvas') DY = Math.max(2, Math.min(DY, Math.round(DY * BAND.span)));  // one target row per occupied source row — otherwise the remap skips bins
+  DX = Math.min(DX, 48); DY = Math.min(DY, 64);
+  if (valign === 'mask' || _dsExtent() === 'band') DY = Math.max(2, Math.min(DY, Math.round(DY * BAND.span)));  // one target row per occupied source row — otherwise the remap skips bins
   const HM = (halign === 'north' || halign === 'sun') ? _headingMap() : {};
   const N = DX * DY;
   const sum = new Float64Array(N), sum2 = new Float64Array(N), cnt = new Float64Array(N), dens = new Float64Array(N);
@@ -2598,8 +2680,8 @@ function dsCellArrays(ch, valign, halign) {
   const res = (window._results || []).filter(r => r.spatial && r.spatial.grid && r.spatial.grid.length);
   if (!res.length) return null;
   let DX = 1, DY = 1; res.forEach(r => { DX = Math.max(DX, r.spatial.gridX); DY = Math.max(DY, r.spatial.gridY); });
-  DX = Math.min(DX, 48); DY = Math.min(DY, 32);
-  if (valign !== 'canvas') DY = Math.max(2, Math.min(DY, Math.round(DY * BAND.span)));  // one target row per occupied source row — otherwise the remap skips bins
+  DX = Math.min(DX, 48); DY = Math.min(DY, 64);
+  if (valign === 'mask' || _dsExtent() === 'band') DY = Math.max(2, Math.min(DY, Math.round(DY * BAND.span)));  // one target row per occupied source row — otherwise the remap skips bins
   const HM = (halign === 'north' || halign === 'sun') ? _headingMap() : {};
   const N = DX * DY, cellVals = Array.from({ length: N }, () => []);
   const cr = new Float64Array(N), cg = new Float64Array(N), cb = new Float64Array(N), cn = new Float64Array(N);
@@ -2669,9 +2751,54 @@ function _dsBand() {
   return out;
 }
 function _fyAdj(fy, valign, yLo, yRange, band) {
-  if (valign === 'mask') return (fy - yLo) / yRange;
-  if (valign === 'canvas') return fy;
-  return (fy - band.lo) / band.span;                     // 'fixed' — common extent
+  if (valign === 'mask') return (fy - yLo) / yRange;      // each image to its own extent
+  if (_dsExtent() === 'full') return fy;                  // whole frame, empty rows and all
+  return (fy - band.lo) / band.span;                      // the dataset's occupied band
+}
+function _dsExtent() { return (window._dsState && window._dsState.extent) || 'band'; }
+// Occupied cell-row band of ONE image, as canvas fractions.
+function _imgBand(r) {
+  const GY = r.spatial.gridY; let a = GY, b = 0;
+  r.spatial.grid.forEach(o => { if (o.cell_y < a) a = o.cell_y; if (o.cell_y > b) b = o.cell_y; });
+  if (a > b) { a = 0; b = GY - 1; }
+  return { a, b, lo: a / GY, hi: (b + 1) / GY };
+}
+// Elevation in degrees at a canvas fraction (0 = top row, 1 = bottom row).
+function _elevAt(proj, f) {
+  if (!(proj && proj.type === 'equirect')) return null;
+  return proj.top + (proj.bottom - proj.top) * f;
+}
+// Degrees spanned by whatever is actually plotted; [null, null] when not meaningful.
+function _plotDeg(proj, valign, band) {
+  if (valign === 'mask') return [null, null];
+  const lo = (_dsExtent() === 'full') ? 0 : band.lo, hi = (_dsExtent() === 'full') ? 1 : band.hi;
+  const a = _elevAt(proj, lo), b = _elevAt(proj, hi);
+  return (a == null) ? [null, null] : [a, b];
+}
+function _tickStep(span) { const s = Math.abs(span); return s <= 12 ? 2 : s <= 30 ? 5 : s <= 70 ? 10 : s <= 200 ? 30 : 45; }
+/* A real axis in the left margin: ticks at round degrees, rotated title.
+   Falls back to a 0–1 normalised scale when degrees are not meaningful. */
+function drawElevAxis(ctx, xRight, yTop, plotH, topDeg, botDeg, title) {
+  ctx.save(); ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+  ctx.strokeStyle = '#c9d6de'; ctx.lineWidth = 1; ctx.beginPath();
+  if (topDeg == null) {
+    ctx.fillText('1.0', xRight - 6, yTop + 7); ctx.fillText('0.0', xRight - 6, yTop + plotH);
+    ctx.moveTo(xRight - 4, yTop + 0.5); ctx.lineTo(xRight, yTop + 0.5);
+    ctx.moveTo(xRight - 4, yTop + plotH - 0.5); ctx.lineTo(xRight, yTop + plotH - 0.5);
+  } else {
+    const step = _tickStep(topDeg - botDeg), lo = Math.min(topDeg, botDeg), hi = Math.max(topDeg, botDeg);
+    for (let d = Math.ceil(lo / step) * step; d <= hi + 1e-6; d += step) {
+      const f = (d - topDeg) / ((botDeg - topDeg) || 1);
+      if (f < -0.002 || f > 1.002) continue;
+      const y = Math.round(yTop + f * plotH) + 0.5;
+      ctx.moveTo(xRight - 4, y); ctx.lineTo(xRight, y);
+      ctx.fillText(Math.round(d) + '°', xRight - 6, y + 3);
+    }
+  }
+  ctx.stroke();
+  ctx.save(); ctx.translate(xRight - 32, yTop + plotH / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.fillText(title, 0, 0); ctx.restore();
+  ctx.restore(); ctx.textAlign = 'left';
 }
 // Axis end labels for the extent actually plotted, in the projection's own degrees.
 function _elevLabels(proj, valign, band) {
@@ -2713,12 +2840,13 @@ function renderDatasetSpatial(ctx, W, H) {
     const colFn = (wx, ry) => { const v = field[ry * DXg + wx]; return isNaN(v) ? null : vizRamp((v - vmin) / ((vmax - vmin) || 1)); };
     if (polar) { const pe = _polarEnds((window._results[0] || {}).proj); drawPolarField(ctx, W - 44, H, DXg, DYg, colFn, pe[0], pe[1]); drawRampLegend(ctx, W - 40, 24, H - 48, vmin, vmax); }
     else {
-      const mL = 8, mT = 34, mR = 60, mB = 24, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / DXg, chh = plotH / DYg;
+      const mL = 46, mT = 34, mR = 60, mB = 24, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / DXg, chh = plotH / DYg;
       for (let y = 0; y < DYg; y++) for (let x = 0; x < DXg; x++) { const c = colFn(x, y); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mL + x * cw, mT + y * chh, Math.ceil(cw), Math.ceil(chh)); }
       ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
       ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('← azimuth →', mL + plotW / 2, mT + plotH + 15);
-      const ee = _elevLabels((window._results[0] || {}).proj, d.valign, _dsBand()); ctx.save(); ctx.translate(mL + 9, mT + plotH / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(`${ee[1]} (bottom) … ${ee[0]} (top)`, 0, 0); ctx.restore();
+      const pd = _plotDeg((window._results[0] || {}).proj, d.valign, _dsBand());
+      drawElevAxis(ctx, mL, mT, plotH, pd[0], pd[1], d.valign === 'mask' ? 'normalised extent' : 'elevation');
       ctx.textAlign = 'left'; drawRampLegend(ctx, mL + plotW + 12, mT, plotH, vmin, vmax);
     }
     return;
@@ -2758,7 +2886,9 @@ function renderDatasetSpatial(ctx, W, H) {
   }
   const mT = 34, mB = 20, mLx = isElev ? 54 : 8, mRx = 8, plotW = W - mLx - mRx, plotH = H - mT - mB;
   if (isElev) { const bh = plotH / NN; for (let k = 0; k < NN; k++) { const c = colAt(k); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mLx, mT + k * bh, plotW, Math.ceil(bh)); }
-    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH); const ee = _elevLabels((window._results[0] || {}).proj, d.valign, _dsBand()); ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillText(ee[0], mLx - 6, mT + 9); ctx.fillText(ee[1], mLx - 6, mT + plotH - 1); ctx.textAlign = 'left'; }
+    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH);
+    const pd = _plotDeg((window._results[0] || {}).proj, d.valign, _dsBand());
+    drawElevAxis(ctx, mLx, mT, plotH, pd[0], pd[1], d.valign === 'mask' ? 'normalised extent' : 'elevation'); }
   else { const bw = plotW / NN; for (let k = 0; k < NN; k++) { const c = colAt(k); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mLx + k * bw, mT, Math.ceil(bw), plotH); }
     ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH); ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.halign === 'none' ? '← azimuth →' : '← azimuth (aligned to ' + d.halign + ') →', mLx + plotW / 2, mT + plotH + 14); ctx.textAlign = 'left'; }
 }
@@ -3009,22 +3139,25 @@ function drawVizGrid(ctx, W, H, r, heat, heatCh) {
   const ch = heat ? (heatCh || (r.spatial.morans_channels && r.spatial.morans_channels[0]) || 'L') : null;
   const chName = { R: 'R', G: 'G', B: 'B', S: 'saturation', V: 'value', L: 'L*', a: 'a*', b: 'b*', C: 'C*ab', red: 'redness', cct: 'CCT', colf: 'colourfulness', rms: 'RMS contrast', dark: 'dark-channel' }[ch] || ch;
   const mI = (heat && r.spatial.morans && r.spatial.morans[ch] != null) ? r.spatial.morans[ch] : null;
-  const mL = 26, mT = 34, mB = 16, mR = heat ? 62 : 8, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / GX, chh = plotH / GY;
+  const IB = _imgBand(r), full = _dsExtent() === 'full';
+  const rowA = full ? 0 : IB.a, rowB = full ? GY - 1 : IB.b, nRow = rowB - rowA + 1;
+  const mL = 46, mT = 34, mB = 16, mR = heat ? 62 : 8, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / GX, chh = plotH / nRow;
   ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
   ctx.fillText(heat ? `Grid heatmap — ${chName}${mI != null ? `  (Moran's I ${mI})` : ''}` : 'Grid — mean colour per cell', 8, 14);
   _vizSub(ctx, `${r.projLabel || ''} · x = azimuth, y = elevation${heat ? ' · ' + chName : ' · mean colour'}`);
   let vmin = Infinity, vmax = -Infinity;
   if (heat) r.spatial.grid.forEach(o => { const v = cellChanVal(o, ch); if (v < vmin) vmin = v; if (v > vmax) vmax = v; });
-  r.spatial.grid.forEach(o => { ctx.fillStyle = heat ? vizRamp((cellChanVal(o, ch) - vmin) / ((vmax - vmin) || 1)) : `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`;
-    ctx.fillRect(mL + o.cell_x * cw, mT + o.cell_y * chh, Math.ceil(cw), Math.ceil(chh)); });
+  r.spatial.grid.forEach(o => { if (o.cell_y < rowA || o.cell_y > rowB) return;
+    ctx.fillStyle = heat ? vizRamp((cellChanVal(o, ch) - vmin) / ((vmax - vmin) || 1)) : `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`;
+    ctx.fillRect(mL + o.cell_x * cw, mT + (o.cell_y - rowA) * chh, Math.ceil(cw), Math.ceil(chh)); });
   ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.beginPath();
   for (let i = 0; i <= GX; i++) { ctx.moveTo(mL + i * cw, mT); ctx.lineTo(mL + i * cw, mT + plotH); }
-  for (let j = 0; j <= GY; j++) { ctx.moveTo(mL, mT + j * chh); ctx.lineTo(mL + plotW, mT + j * chh); }
+  for (let j = 0; j <= nRow; j++) { ctx.moveTo(mL, mT + j * chh); ctx.lineTo(mL + plotW, mT + j * chh); }
   ctx.stroke();
   ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
   ctx.textAlign = 'center'; const sx = Math.max(1, Math.round(GX / 8)); for (let i = 0; i <= GX; i += sx) ctx.fillText(i, mL + i * cw, mT + plotH + 12);
-  ctx.textAlign = 'right'; const sy = Math.max(1, Math.round(GY / 8)); for (let j = 0; j <= GY; j += sy) ctx.fillText(j, mL - 4, mT + j * chh + 3);
   ctx.textAlign = 'left';
+  drawElevAxis(ctx, mL, mT, plotH, _elevAt(r.proj, rowA / GY), _elevAt(r.proj, (rowB + 1) / GY), 'elevation');
   if (heat && vmax > vmin) { const lx = W - mR + 16, ly = mT, lh = plotH, lw = 12;
     for (let k = 0; k < lh; k++) { ctx.fillStyle = vizRamp(1 - k / lh); ctx.fillRect(lx, ly + k, lw, 1); }
     ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
@@ -3063,12 +3196,19 @@ function drawVizProfiles(ctx, W, H, r) {
   const cols = r.spatial.cols, rows = r.spatial.rows, mT = 30, half = (H - mT - 8) / 2;
   ctx.fillStyle = '#1a2332'; ctx.font = '600 11px sans-serif'; ctx.fillText('Column profile (left→right) and row profile (top→bottom)', 8, 12);
   _vizSub(ctx, `${r.projLabel || ''} · columns = azimuth, rows = elevation`);
-  const cw = (W - 16) / (cols.length || 1);
-  cols.forEach((o, i) => { ctx.fillStyle = `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; ctx.fillRect(8 + i * cw, mT, Math.ceil(cw), half - 4); });
-  const rh = (half - 4) / (rows.length || 1);
-  rows.forEach((o, i) => { ctx.fillStyle = `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; ctx.fillRect(8, mT + half + i * rh, W - 16, Math.ceil(rh)); });
+  const mL = 46, srcH = r.spatial.srcH || (rows.length ? rows[rows.length - 1].index + 1 : 1);
+  const full = _dsExtent() === 'full';
+  const rA = full ? 0 : (rows.length ? rows[0].index : 0);
+  const rB = full ? srcH - 1 : (rows.length ? rows[rows.length - 1].index : 0);
+  const nR = Math.max(1, rB - rA + 1);
+  const cw = (W - mL - 8) / (cols.length || 1);
+  cols.forEach((o, i) => { ctx.fillStyle = `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; ctx.fillRect(mL + i * cw, mT, Math.ceil(cw), half - 4); });
+  const rh = (half - 4) / nR;
+  rows.forEach(o => { if (o.index < rA || o.index > rB) return;
+    ctx.fillStyle = `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; ctx.fillRect(mL, mT + half + (o.index - rA) * rh, W - mL - 8, Math.ceil(rh)); });
   ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
-  ctx.fillText('columns →', 8, mT + half - 5); ctx.fillText('rows ↓', 8, mT + half + 11);
+  ctx.fillText('columns →', mL, mT + half - 5);
+  drawElevAxis(ctx, mL, mT + half, half - 4, _elevAt(r.proj, rA / srcH), _elevAt(r.proj, (rB + 1) / srcH), 'elevation');
 }
 function drawVizHist(ctx, W, H, r, channel) {
   const m = r.metrics, mode = channel === 'saturation' ? 'sat' : channel === 'value' ? 'val' : 'hue';
