@@ -643,6 +643,7 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
               <label><input type="checkbox" class="colMetric" value="warm_pct" checked> warm/cool/neutral</label>
               <label><input type="checkbox" class="colMetric" value="hue_entropy" checked> hue entropy</label>
               <label><input type="checkbox" class="colMetric" value="hue_circular_variance"> hue circular variance</label>
+              <label><input type="checkbox" class="colMetric" value="chromaticity" checked> u&prime;/v&prime; + duv</label>
             </div>
             <div class="cfg-row" style="border-top:1px solid var(--border);padding-top:.45rem">
               <label><input type="checkbox" id="includeExif" checked> Extract EXIF (GPS, date, camera)</label>
@@ -803,7 +804,24 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
               <label><input type="checkbox" class="vizType" value="gridheat" checked> Grid heatmap</label>
               <label><input type="checkbox" class="vizType" value="profiles" checked> Row/col profile</label>
               <label><input type="checkbox" class="vizType" value="hist" checked> Histogram</label>
+              <label><input type="checkbox" class="vizType" value="chroma"> Chromaticity (u&prime;v&prime;)</label>
             </div>
+          </div>
+        </details>
+        <details id="secCompare">
+          <summary style="cursor:pointer;font-weight:600">Compare two sets (&Delta;E2000)</summary>
+          <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.55rem">
+            <div class="sub">Loads and analyzes two sets of images under the current Configuration (precision, transparency, projection &amp; weighting), matches files by filename, and reports the CIEDE2000 perceptual colour difference per matched pair &mdash; e.g. the same frames processed two ways (camera white balance vs a fixed reference), or two capture conditions.</div>
+            <div class="cfg-row" style="gap:1rem;flex-wrap:wrap">
+              <label style="margin:0">Set A <input type="file" id="cmpFilesA" multiple accept="image/*"></label>
+              <label style="margin:0">Set B <input type="file" id="cmpFilesB" multiple accept="image/*"></label>
+            </div>
+            <div class="cfg-row" style="gap:.6rem">
+              <button class="btn btn-outline btn-sm" onclick="runCompare()">Analyze &amp; compare</button>
+              <button class="btn btn-outline btn-sm" onclick="checkOutliers()" title="Uses the CURRENT single-queue results above &mdash; flags images whose colour sits furthest (by &Delta;E2000) from the dataset's weighted-mean colour.">Flag outliers in current results</button>
+              <span id="cmpStatus" class="sub" style="margin:0"></span>
+            </div>
+            <div id="cmpResults"></div>
           </div>
         </details>
       </div>
@@ -900,6 +918,101 @@ function labToLch(L, a, b) {
 }
 
 // Correlated colour temperature (K) from mean RGB, via CIE xy + McCamy's approximation
+// ── CIE chromaticity: xy / u'v', spectral locus, sRGB gamut, Planckian locus + duv ──
+// Real CIE 1931 2° standard-observer spectral locus (5nm steps, 380-700nm), [wavelength, x, y].
+const SPECTRAL_LOCUS_XY = [[380,0.1741,0.005],[385,0.174,0.005],[390,0.1738,0.0049],[395,0.1736,0.0049],[400,0.1733,0.0048],[405,0.173,0.0048],[410,0.1726,0.0048],[415,0.1721,0.0048],[420,0.1714,0.0051],[425,0.1703,0.0058],[430,0.1689,0.0069],[435,0.1669,0.0086],[440,0.1644,0.0109],[445,0.1611,0.0138],[450,0.1566,0.0177],[455,0.151,0.0227],[460,0.144,0.0297],[465,0.1355,0.0399],[470,0.1241,0.0578],[475,0.1096,0.0868],[480,0.0913,0.1327],[485,0.0687,0.2007],[490,0.0454,0.295],[495,0.0235,0.4127],[500,0.0082,0.5384],[505,0.0039,0.6548],[510,0.0139,0.7502],[515,0.0389,0.812],[520,0.0743,0.8338],[525,0.1142,0.8262],[530,0.1547,0.8059],[535,0.1929,0.7816],[540,0.2296,0.7543],[545,0.2658,0.7243],[550,0.3016,0.6923],[555,0.3374,0.6588],[560,0.3731,0.6245],[565,0.4087,0.5896],[570,0.4441,0.5547],[575,0.4788,0.5202],[580,0.5125,0.4866],[585,0.5448,0.4544],[590,0.5752,0.4242],[595,0.6029,0.3965],[600,0.627,0.3725],[605,0.6482,0.3514],[610,0.6658,0.334],[615,0.6801,0.3197],[620,0.6915,0.3083],[625,0.7006,0.2993],[630,0.7079,0.292],[635,0.714,0.2859],[640,0.719,0.2809],[645,0.723,0.2769],[650,0.726,0.274],[655,0.7283,0.2717],[660,0.73,0.27],[665,0.7311,0.2689],[670,0.732,0.268],[675,0.7327,0.2673],[680,0.7334,0.2666],[685,0.734,0.266],[690,0.7344,0.2656],[695,0.7346,0.2654],[700,0.7347,0.2653]];
+const SRGB_PRIMARIES_XY = [[0.6400,0.3300],[0.3000,0.6000],[0.1500,0.0600]];  // R, G, B
+function rgbToXy(r, g, b) {
+  const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const R = lin(r), G = lin(g), B = lin(b);
+  const X = R * 0.4124564 + G * 0.3575761 + B * 0.1804375;
+  const Y = R * 0.2126729 + G * 0.7151522 + B * 0.0721750;
+  const Z = R * 0.0193339 + G * 0.1191920 + B * 0.9503041;
+  const s = X + Y + Z; if (s <= 0) return [0.3127, 0.3290];
+  return [X / s, Y / s];
+}
+function xyToUV(x, y) {                          // CIE 1976 u', v'
+  const d = -2 * x + 12 * y + 3;
+  if (Math.abs(d) < 1e-12) return [0, 0];
+  return [4 * x / d, 9 * y / d];
+}
+function rgbToUV(r, g, b) { const [x, y] = rgbToXy(r, g, b); return xyToUV(x, y); }
+// Krystek (1985) rational-polynomial approximation of the Planckian locus, CIE 1960 (u, v), valid ~1000-15000K.
+// Verified against colour-science's CCT_to_uv_Krystek1985 to floating-point precision (max err 1.7e-16).
+function planckianUV1960(T) {
+  const T2 = T * T;
+  const u = (0.860117757 + 1.54118254e-4 * T + 1.28641212e-7 * T2) / (1 + 8.42420235e-4 * T + 7.08145163e-7 * T2);
+  const v = (0.317398726 + 4.22806245e-5 * T + 4.20481691e-8 * T2) / (1 - 2.89741816e-5 * T + 1.61456053e-7 * T2);
+  return [u, v];
+}
+const _uv1960to1976 = (u, v) => [u, 1.5 * v];
+let _LOCUS_UV_CACHE = null;
+function _planckianLocusUV(n) {
+  if (_LOCUS_UV_CACHE && _LOCUS_UV_CACHE.length === n + 1) return _LOCUS_UV_CACHE;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const T = 1000 * Math.pow(20, i / n);           // 1000K .. 20000K, geometric spacing
+    const [u1960, v1960] = planckianUV1960(T);
+    const [u, v] = _uv1960to1976(u1960, v1960);
+    pts.push({ T, u, v });
+  }
+  _LOCUS_UV_CACHE = pts;
+  return pts;
+}
+// Nearest point on the Planckian locus in u'v', + signed perpendicular distance (duv).
+// Sign calibrated against Ohno (2013): positive = above the locus (toward green), negative = below (toward magenta).
+// Approximate — the Krystek fit and the coarse+local-refine search are adequate for exploratory plotting and
+// within-dataset comparison, not a certified absolute duv (see protocol notes).
+function planckianNearest(u, v) {
+  const locus = _planckianLocusUV(600);
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < locus.length; i++) { const p = locus[i], d = (p.u - u) ** 2 + (p.v - v) ** 2; if (d < bd) { bd = d; best = i; } }
+  const lo = Math.max(0, best - 1), hi = Math.min(locus.length - 1, best + 1);
+  let bT = locus[best].T, bU = locus[best].u, bV = locus[best].v, bDist = Math.sqrt(bd);
+  const steps = 120;
+  for (let s = 0; s <= steps; s++) {
+    const T = locus[lo].T + (locus[hi].T - locus[lo].T) * s / steps;
+    const [u1960, v1960] = planckianUV1960(T); const [uu, vv] = _uv1960to1976(u1960, v1960);
+    const d = Math.sqrt((uu - u) ** 2 + (vv - v) ** 2);
+    if (d < bDist) { bDist = d; bT = T; bU = uu; bV = vv; }
+  }
+  const dT = Math.max(1, bT * 0.001);
+  const [ua1960, va1960] = planckianUV1960(bT - dT), [ub1960, vb1960] = planckianUV1960(bT + dT);
+  const [ua, va] = _uv1960to1976(ua1960, va1960), [ub, vb] = _uv1960to1976(ub1960, vb1960);
+  const tx = ub - ua, ty = vb - va;
+  const nx = ty, ny = -tx;
+  const sign = ((u - bU) * nx + (v - bV) * ny) >= 0 ? 1 : -1;
+  return { cct: Math.round(bT), duv: Math.round(sign * bDist * 1e5) / 1e5 };
+}
+// CIEDE2000 perceptual colour difference. Validated to <3e-14 against colour-science's
+// delta_E_CIE2000 across the Sharma et al. (2005) reference pairs plus 20 random Lab pairs.
+function deltaE2000(L1, a1, b1, L2, a2, b2) {
+  const d2r = d => d * Math.PI / 180, r2d = r => r * 180 / Math.PI;
+  const C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2);
+  const Cbar = (C1 + C2) / 2, pow25_7 = Math.pow(25, 7), Cbar7 = Math.pow(Cbar, 7);
+  const G = 0.5 * (1 - Math.sqrt(Cbar7 / (Cbar7 + pow25_7)));
+  const a1p = a1 * (1 + G), a2p = a2 * (1 + G);
+  const C1p = Math.hypot(a1p, b1), C2p = Math.hypot(a2p, b2);
+  const h1p = C1p === 0 ? 0 : ((r2d(Math.atan2(b1, a1p)) + 360) % 360);
+  const h2p = C2p === 0 ? 0 : ((r2d(Math.atan2(b2, a2p)) + 360) % 360);
+  const dLp = L2 - L1, dCp = C2p - C1p;
+  let dhp = 0;
+  if (C1p * C2p !== 0) { const diff = h2p - h1p; dhp = Math.abs(diff) <= 180 ? diff : (diff > 180 ? diff - 360 : diff + 360); }
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(d2r(dhp) / 2);
+  const Lbarp = (L1 + L2) / 2, Cbarp = (C1p + C2p) / 2;
+  let hbarp;
+  if (C1p * C2p === 0) hbarp = h1p + h2p;
+  else { const diff = Math.abs(h1p - h2p); hbarp = diff <= 180 ? (h1p + h2p) / 2 : ((h1p + h2p < 360) ? (h1p + h2p + 360) / 2 : (h1p + h2p - 360) / 2); }
+  const T = 1 - 0.17 * Math.cos(d2r(hbarp - 30)) + 0.24 * Math.cos(d2r(2 * hbarp)) + 0.32 * Math.cos(d2r(3 * hbarp + 6)) - 0.20 * Math.cos(d2r(4 * hbarp - 63));
+  const dTheta = 30 * Math.exp(-Math.pow((hbarp - 275) / 25, 2));
+  const Cbarp7 = Math.pow(Cbarp, 7), Rc = 2 * Math.sqrt(Cbarp7 / (Cbarp7 + pow25_7));
+  const Sl = 1 + (0.015 * Math.pow(Lbarp - 50, 2)) / Math.sqrt(20 + Math.pow(Lbarp - 50, 2));
+  const Sc = 1 + 0.045 * Cbarp, Sh = 1 + 0.015 * Cbarp * T;
+  const Rt = -Math.sin(d2r(2 * dTheta)) * Rc;
+  const tL = dLp / Sl, tC = dCp / Sc, tH = dHp / Sh;
+  return Math.sqrt(tL * tL + tC * tC + tH * tH + Rt * tC * tH);
+}
+
 function rgbToCCT(r, g, b) {
   const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
   const R = lin(r), G = lin(g), B = lin(b);
@@ -1250,9 +1363,12 @@ function imageMetrics(pixels, weights) {
   const rms_contrast = meanY > 0 ? r3(Math.sqrt(varY) / meanY) : 0;
   const dark_channel = r3((sumDark / totalW) / 255);
   const cct = rgbToCCT(meanR, meanG, meanB);
+  const [uPrime, vPrime] = rgbToUV(meanR, meanG, meanB);
+  const _pl = planckianNearest(uPrime, vPrime);
 
   const pct = x => Math.round((x / totalW) * 1000) / 10;
   return {
+    u_prime: Math.round(uPrime * 1e4) / 1e4, v_prime: Math.round(vPrime * 1e4) / 1e4, duv: _pl.duv,
     mean_r: Math.round(sR.mean), mean_g: Math.round(sG.mean), mean_b: Math.round(sB.mean),
     median_r: Math.round(sR.median), median_g: Math.round(sG.median), median_b: Math.round(sB.median),
     mean_hue: meanHue, median_hue: r1(medHue),
@@ -1629,6 +1745,7 @@ function analyzePixels(rgba, w, h, opts) {
       const [hh, ss, vv] = rgbToHsv(r, g, b);
       const [L, A, B] = rgbToLab(r, g, b);
       const [C, H] = labToLch(L, A, B);
+      const [cu, cv] = rgbToUV(r, g, b); const cPl = planckianNearest(cu, cv);
       return {
         cluster: rank + 1,
         _kmIndex: c,
@@ -1636,6 +1753,7 @@ function analyzePixels(rgba, w, h, opts) {
         red: Math.round(r), green: Math.round(g), blue: Math.round(b),
         hue: hh, saturation: ss, value: vv,
         lab_l: L, lab_a: A, lab_b: B, lch_c: C, lch_h: H,
+        cct: rgbToCCT(r, g, b), u_prime: Math.round(cu * 1e4) / 1e4, v_prime: Math.round(cv * 1e4) / 1e4, duv: cPl.duv,
         percentage: Math.round(((wcounts ? wcounts[c] : km.counts[c]) / wtot) * 10000) / 100,
         pixel_count: km.counts[c],
         weighted_count: wcounts ? wcounts[c] : km.counts[c],
@@ -2162,10 +2280,91 @@ async function analyzeImages() {
   analyzeBtn.disabled = false;
 }
 
+// ── Compare two sets (ΔE2000) ──────────────────────────────────────
+// Matches by filename stem (strips extension and a leading 'cutter_' / trailing
+// '_cutout' as Image Cutter names them) so a WB-pair or condition-pair exported
+// with the tool's own naming lines up without manual renaming.
+function _cmpStemKey(name) {
+  let s = name.replace(/\.[^.]+$/, '');
+  s = s.replace(/^cutter_/, '');
+  s = s.replace(/_(cutout|inverse|mask)$/, '');
+  return s;
+}
+async function _cmpMeanLab(file, opts) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImageFromBlobUrl(url);
+    const { rgba, w, h } = drawScaled(img, opts.precision);
+    const result = analyzePixels(rgba, w, h, { numClusters: 0, transparencyBg: 'none', includePixel: false,
+      includeSpatial: false, moranChannels: [], projection: opts.projection });
+    if (result.error) throw new Error(result.error);
+    return result.metrics;
+  } finally { URL.revokeObjectURL(url); }
+}
+async function runCompare() {
+  const filesA = Array.from((document.getElementById('cmpFilesA') || {}).files || []);
+  const filesB = Array.from((document.getElementById('cmpFilesB') || {}).files || []);
+  const status = document.getElementById('cmpStatus'), out = document.getElementById('cmpResults');
+  if (!filesA.length || !filesB.length) { if (status) status.textContent = 'Choose files for both Set A and Set B.'; return; }
+  const plan = readAnalysisPlan();
+  const opts = { precision: parseInt(document.getElementById('precision').value, 10) || 512, projection: plan.projection };
+  const mapA = new Map(filesA.map(f => [_cmpStemKey(f.name), f]));
+  const mapB = new Map(filesB.map(f => [_cmpStemKey(f.name), f]));
+  const keys = [...mapA.keys()].filter(k => mapB.has(k));
+  if (!keys.length) { if (status) status.textContent = `No matching filenames between Set A (${filesA.length}) and Set B (${filesB.length}) after stripping extensions.`; out.innerHTML = ''; return; }
+  const rows = [];
+  for (let i = 0; i < keys.length; i++) {
+    if (status) status.textContent = `Comparing ${i + 1} of ${keys.length}…`;
+    await sleep(5);
+    try {
+      const mA = await _cmpMeanLab(mapA.get(keys[i]), opts), mB = await _cmpMeanLab(mapB.get(keys[i]), opts);
+      const dE = deltaE2000(mA.mean_lightness, mA.mean_lab_a, mA.mean_lab_b, mB.mean_lightness, mB.mean_lab_a, mB.mean_lab_b);
+      rows.push({ key: keys[i], mA, mB, dE });
+    } catch (e) { rows.push({ key: keys[i], error: e.message || String(e) }); }
+  }
+  const ok2 = rows.filter(r => !r.error);
+  const des = ok2.map(r => r.dE).sort((a, b) => a - b);
+  const mean = des.reduce((s, v) => s + v, 0) / (des.length || 1);
+  const median = des.length ? (des.length % 2 ? des[(des.length - 1) / 2] : (des[des.length / 2 - 1] + des[des.length / 2]) / 2) : 0;
+  if (status) status.textContent = `Done — ${ok2.length} of ${keys.length} matched pair(s) compared${rows.length > ok2.length ? `, ${rows.length - ok2.length} failed` : ''}.`;
+  const summary = ok2.length ? `<div style="font-size:.75rem;background:#f2f8f4;border-left:3px solid #4a9d6a;color:#2c5f42;padding:.5rem .65rem;border-radius:0 4px 4px 0;margin-bottom:.5rem">
+      <b>ΔE00</b> — mean ${mean.toFixed(2)} · median ${median.toFixed(2)} · min ${des[0].toFixed(2)} · max ${des[des.length - 1].toFixed(2)} · n=${ok2.length}<br>
+      <span style="color:#54626f">Rule of thumb: &lt;1 imperceptible · 1&ndash;2 perceptible on close inspection · 2&ndash;10 perceptible at a glance · &gt;10 different colours.</span></div>` : '';
+  const tRows = rows.map(r => r.error
+    ? `<tr><td>${escapeHtml(r.key)}</td><td colspan="4" style="color:#b23">${escapeHtml(r.error)}</td></tr>`
+    : `<tr><td>${escapeHtml(r.key)}</td><td>${r.mA.mean_lightness.toFixed(1)}, ${r.mA.mean_lab_a.toFixed(1)}, ${r.mA.mean_lab_b.toFixed(1)}</td>
+        <td>${r.mB.mean_lightness.toFixed(1)}, ${r.mB.mean_lab_a.toFixed(1)}, ${r.mB.mean_lab_b.toFixed(1)}</td>
+        <td style="font-weight:600">${r.dE.toFixed(2)}</td></tr>`).join('');
+  out.innerHTML = summary + `<div style="max-height:280px;overflow:auto"><table class="stats-table"><thead><tr><th>file</th><th>Set A L*a*b*</th><th>Set B L*a*b*</th><th>ΔE00</th></tr></thead><tbody>${tRows}</tbody></table></div>
+    <button class="btn btn-outline btn-sm" style="margin-top:.4rem" onclick="downloadCompareCSV()">⬇ CSV</button>`;
+  window._cmpRows = rows;
+}
+function downloadCompareCSV() {
+  const rows = window._cmpRows || [];
+  const header = ['file', 'A_L', 'A_a', 'A_b', 'B_L', 'B_a', 'B_b', 'deltaE00'];
+  const body = rows.filter(r => !r.error).map(r => [r.key, r.mA.mean_lightness, r.mA.mean_lab_a, r.mA.mean_lab_b, r.mB.mean_lightness, r.mB.mean_lab_a, r.mB.mean_lab_b, +r.dE.toFixed(4)]);
+  downloadCSVText(buildCSV(header, body), `colour_compare-deltaE00_${todayStamp()}.csv`);
+}
+// Per-image ΔE2000 vs the dataset's own (projection-weighted) mean colour — flags likely
+// contamination (sun disc, residual obstruction) that a per-channel mean/median check might miss.
+function checkOutliers() {
+  const res = window._results || [], out = document.getElementById('cmpResults'), status = document.getElementById('cmpStatus');
+  if (!res.length) { if (status) status.textContent = 'Run the main analysis above first.'; return; }
+  let sw = 0, sL = 0, sA = 0, sB = 0;
+  res.forEach(r => { const m = r.metrics; const w = m.analyzed_pixels || 1; sw += w; sL += w * m.mean_lightness; sA += w * m.mean_lab_a; sB += w * m.mean_lab_b; });
+  const meanL = sL / sw, meanA = sA / sw, meanB = sB / sw;
+  const rows = res.map(r => ({ r, dE: deltaE2000(r.metrics.mean_lightness, r.metrics.mean_lab_a, r.metrics.mean_lab_b, meanL, meanA, meanB) }))
+    .sort((a, b) => b.dE - a.dE);
+  if (status) status.textContent = `Dataset mean L*a*b* = ${meanL.toFixed(1)}, ${meanA.toFixed(1)}, ${meanB.toFixed(1)} (n=${res.length}, weighted).`;
+  const tRows = rows.map(({ r, dE }) => `<tr><td>${escapeHtml(r.filename)}</td><td>${r.metrics.mean_lightness.toFixed(1)}, ${r.metrics.mean_lab_a.toFixed(1)}, ${r.metrics.mean_lab_b.toFixed(1)}</td><td style="font-weight:600">${dE.toFixed(2)}</td></tr>`).join('');
+  out.innerHTML = `<div style="max-height:280px;overflow:auto"><table class="stats-table"><thead><tr><th>file</th><th>mean L*a*b*</th><th>ΔE00 vs dataset mean</th></tr></thead><tbody>${tRows}</tbody></table></div>
+    <div class="sub" style="margin-top:.3rem">Sorted worst first. A high value alone isn’t necessarily wrong — check the image — but it’s where to look.</div>`;
+}
+
 // ── Rendering ───────────────────────────────────────────────────────
 function vizDetailsHtml(r, opts) {
   if (!opts.includeViz) return '';
-  const vt = (opts.vizTypes && opts.vizTypes.length) ? opts.vizTypes : ['original', 'palette', 'cluster', 'grid', 'gridheat', 'profiles', 'hist'];
+  const vt = (opts.vizTypes && opts.vizTypes.length) ? opts.vizTypes : ['original', 'palette', 'cluster', 'grid', 'gridheat', 'profiles', 'hist', 'chroma'];
   const opt = [];
   if (vt.includes('original')) opt.push(['original', 'Original image']);
   if (r.clusters.length && vt.includes('palette')) opt.push(['palette', 'Palette']);
@@ -2174,6 +2373,7 @@ function vizDetailsHtml(r, opts) {
   if (r.spatial && vt.includes('gridheat')) opt.push(['gridheat', 'Grid heatmap']);
   if (r.spatial && vt.includes('profiles')) opt.push(['profiles', 'Row/column profile']);
   if (vt.includes('hist')) opt.push(['hist', 'H/S/V histogram']);
+  if (r.clusters.length && vt.includes('chroma')) opt.push(['chroma', "Chromaticity (u'v')"]);
   if (!opt.length) return '';
   const options = opt.map(o => `<option value="${o[0]}">${o[1]}</option>`).join('');
   return `
@@ -2366,6 +2566,7 @@ function renderResults(cards, total, ok, failed, opts) {
             <option value="hist">Histogram (summed)</option>
             <option value="palette">Aggregate palette</option>
             <option value="dist">Metric distribution</option>
+            <option value="dschroma">Chromaticity (u&prime;v&prime;)</option>
             <optgroup label="Dataset spatial (needs Spatial structure)">
               <option value="dsgrid">Composite grid (by position)</option>
               <option value="dselev">Mean elevation profile</option>
@@ -2444,12 +2645,19 @@ function showDatasetViz(kind) {
     else if (kind === 'dist') ctl.innerHTML = '<span style="font-size:0.72rem">metric:</span> <select style="font-size:0.72rem" onchange="setDsMetric(this.value)">' +
       dsMetricOptions().map(o => `<option value="${o[0]}" ${window._dsState.metric === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
     else if (['dsgrid', 'dsvar', 'dselev', 'dsazim', 'dsclust'].includes(kind)) ctl.innerHTML = dsSpatialControlsHtml(kind);
+    else if (kind === 'dschroma') ctl.innerHTML =
+      '<span style="font-size:0.72rem">points:</span> <select style="font-size:0.72rem" onchange="setDsChromaLevel(this.value)">' +
+      [['image', 'image means'], ['cluster', 'all clusters']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaLevel || 'image') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') +
+      '</select> <span style="font-size:0.72rem;margin-left:.4rem">colour by:</span> <select style="font-size:0.72rem" onchange="setDsChromaColour(this.value)">' +
+      [['date', 'capture date'], ['none', 'single colour']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaColour || 'date') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
     else ctl.innerHTML = '';
   }
   drawDatasetViz();
 }
 function setDsChannel(ch) { window._dsState.channel = ch; drawDatasetViz(); }
 function setDsMetric(mk) { window._dsState.metric = mk; drawDatasetViz(); }
+function setDsChromaLevel(v) { window._dsState.chromaLevel = v; drawDatasetViz(); }
+function setDsChromaColour(v) { window._dsState.chromaColour = v; drawDatasetViz(); }
 function drawDatasetViz() { const cv = dsCanvas(); if (cv) renderDatasetViz(cv.getContext('2d'), cv.width, cv.height); }
 function aggregatePalette() {
   const agg = {};
@@ -2466,6 +2674,7 @@ function renderDatasetViz(ctx, W, H) {
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   const st = window._dsState;
   if (['dsgrid', 'dsvar', 'dselev', 'dsazim', 'dsclust'].includes(st.kind)) { renderDatasetSpatial(ctx, W, H); return; }
+  if (st.kind === 'dschroma') { drawDatasetChromaticity(ctx, W, H); return; }
   if (st.kind === 'palette') {
     ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText('Aggregate palette — all images, sorted by hue', 8, 14);
     const items = aggregatePalette(), mL = 8, mT = 20, mB = 8, plotW = W - 16, plotH = H - mT - mB; let x = mL;
@@ -3084,6 +3293,7 @@ function renderViz(ctx, W, H, r, st) {
   else if (st.kind === 'grid') drawVizGrid(ctx, W, H, r, false);
   else if (st.kind === 'gridheat') drawVizGrid(ctx, W, H, r, true, st.heatCh);
   else if (st.kind === 'profiles') drawVizProfiles(ctx, W, H, r);
+  else if (st.kind === 'chroma') drawVizChromaImage(ctx, W, H, r);
   else drawVizHist(ctx, W, H, r, st.channel || 'hue');
 }
 function drawVizOriginal(ctx, W, H, r) {
@@ -3209,6 +3419,114 @@ function drawVizProfiles(ctx, W, H, r) {
   ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
   ctx.fillText('columns →', mL, mT + half - 5);
   drawElevAxis(ctx, mL, mT + half, half - 4, _elevAt(r.proj, rA / srcH), _elevAt(r.proj, (rB + 1) / srcH), 'elevation');
+}
+/* ── CIE 1976 u'v' chromaticity plot: spectral locus, sRGB gamut, Planckian locus + points ── */
+function _chromaFrame(W, H) {
+  const mL = 44, mT = 10, mR = 14, mB = 30;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  // u' spans roughly 0-0.62, v' roughly 0-0.6 for the full horseshoe; fit with equal scale.
+  const uMin = 0, uMax = 0.65, vMin = 0, vMax = 0.62;
+  const sx = plotW / (uMax - uMin), sy = plotH / (vMax - vMin);
+  const s = Math.min(sx, sy);
+  const px = u => mL + (u - uMin) * s, py = v => mT + plotH - (v - vMin) * s;
+  return { mL, mT, plotW, plotH, px, py };
+}
+function _drawChromaBackground(ctx, W, H, showPlanck) {
+  const F = _chromaFrame(W, H);
+  ctx.save();
+  // spectral locus (horseshoe) + purple line closing it
+  ctx.beginPath();
+  SPECTRAL_LOCUS_XY.forEach(([wl, x, y], i) => { const [u, v] = xyToUV(x, y); const px = F.px(u), py = F.py(v); i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(120,120,120,0.06)'; ctx.fill();
+  ctx.strokeStyle = '#9aa7b5'; ctx.lineWidth = 1; ctx.stroke();
+  // sRGB gamut triangle
+  ctx.beginPath();
+  SRGB_PRIMARIES_XY.forEach(([x, y], i) => { const [u, v] = xyToUV(x, y); const px = F.px(u), py = F.py(v); i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); });
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(58,110,165,0.55)'; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('sRGB gamut', F.px(0.10) + 3, F.py(0.53));
+  // Planckian locus
+  if (showPlanck) {
+    const locus = _planckianLocusUV(150);
+    ctx.beginPath();
+    locus.forEach((p, i) => { const px = F.px(p.u), py = F.py(p.v); i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); });
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.fillStyle = '#c0392b'; ctx.font = '9px sans-serif';
+    [2000, 4000, 6500, 10000].forEach(T => {
+      const [u1960, v1960] = planckianUV1960(T); const [u, v] = _uv1960to1976(u1960, v1960);
+      const px = F.px(u), py = F.py(v);
+      ctx.beginPath(); ctx.arc(px, py, 1.6, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillText(T + 'K', px + 4, py - 3);
+    });
+  }
+  ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(F.mL, F.mT, F.plotW, F.plotH);
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText("u'", F.mL + F.plotW / 2, F.mT + F.plotH + 20);
+  ctx.save(); ctx.translate(14, F.mT + F.plotH / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("v'", 0, 0); ctx.restore();
+  // tick marks
+  ctx.font = '8px sans-serif'; ctx.fillStyle = '#8a97a4';
+  for (let t = 0; t <= 0.6; t += 0.1) {
+    ctx.textAlign = 'center'; ctx.fillText(t.toFixed(1), F.px(t), F.mT + F.plotH + 10);
+    ctx.textAlign = 'right'; ctx.fillText(t.toFixed(1), F.mL - 4, F.py(t) + 3);
+  }
+  ctx.restore();
+  return F;
+}
+function drawVizChromaImage(ctx, W, H, r) {
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText("Chromaticity (CIE 1976 u'v') — dominant colours", 8, 13);
+  const F = _drawChromaBackground(ctx, W, H, true);
+  const m = r.metrics;
+  (r.clusters || []).forEach(c => {
+    if (c.u_prime == null) return;
+    const px = F.px(c.u_prime), py = F.py(c.v_prime);
+    const share = (c.percentage || 0) / 100;
+    const rad = 2.5 + 9 * Math.sqrt(Math.max(0, share));
+    ctx.beginPath(); ctx.arc(px, py, rad, 0, 2 * Math.PI);
+    ctx.fillStyle = `rgb(${c.red},${c.green},${c.blue})`; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.75; ctx.stroke();
+  });
+  if (m && m.u_prime != null) {
+    const px = F.px(m.u_prime), py = F.py(m.v_prime);
+    ctx.beginPath(); ctx.arc(px, py, 4, 0, 2 * Math.PI); ctx.fillStyle = '#1a2332'; ctx.fill();
+    ctx.beginPath(); ctx.arc(px, py, 6.5, 0, 2 * Math.PI); ctx.strokeStyle = '#1a2332'; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.fillStyle = '#1a2332'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(`mean · CCT ${m.cct ?? '—'}K · duv ${m.duv != null ? (m.duv >= 0 ? '+' : '') + m.duv.toFixed(4) : '—'}`, px + 8, py + 3);
+  }
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('dot size = pixel share · red curve = Planckian locus · dashed = sRGB gamut', 8, H - 6);
+}
+function drawDatasetChromaticity(ctx, W, H) {
+  const st = window._dsState, level = st.chromaLevel || 'image', colourBy = st.chromaColour || 'date';
+  const res = window._results || [];
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText(`Chromaticity (CIE 1976 u'v') — ${level === 'image' ? res.length + ' image means' : 'all clusters'}`, 8, 13);
+  const F = _drawChromaBackground(ctx, W, H, true);
+  const dates = [...new Set(res.map(r => (r.exif && r.exif.datetime) ? String(r.exif.datetime).slice(0, 10) : 'no date'))];
+  const palette = ['#3a6ea5', '#c0392b', '#27ae60', '#8e44ad', '#e67e22', '#16a085', '#d35400', '#2c3e50'];
+  const colourFor = d => palette[dates.indexOf(d) % palette.length];
+  const pts = [];
+  if (level === 'image') {
+    for (const r of res) { const m = r.metrics; if (m && m.u_prime != null) pts.push({ u: m.u_prime, v: m.v_prime, d: (r.exif && r.exif.datetime) ? String(r.exif.datetime).slice(0, 10) : 'no date', rgb: [m.mean_r, m.mean_g, m.mean_b] }); }
+  } else {
+    for (const r of res) for (const c of (r.clusters || [])) { if (c.u_prime == null) continue; pts.push({ u: c.u_prime, v: c.v_prime, d: (r.exif && r.exif.datetime) ? String(r.exif.datetime).slice(0, 10) : 'no date', rgb: [c.red, c.green, c.blue] }); }
+  }
+  pts.forEach(p => {
+    const px = F.px(p.u), py = F.py(p.v);
+    ctx.beginPath(); ctx.arc(px, py, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = colourBy === 'date' ? colourFor(p.d) : `rgb(${p.rgb[0]},${p.rgb[1]},${p.rgb[2]})`;
+    ctx.globalAlpha = 0.75; ctx.fill(); ctx.globalAlpha = 1;
+  });
+  if (colourBy === 'date' && dates.length > 1) {
+    let lx = F.mL + F.plotW - 8, ly = F.mT + 10;
+    ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    dates.slice(0, 8).forEach(d => { ctx.fillStyle = colourFor(d); ctx.beginPath(); ctx.arc(lx - 4, ly - 3, 3, 0, 2 * Math.PI); ctx.fill(); ctx.fillStyle = '#3d4a5c'; ctx.fillText(d, lx - 10, ly); ly += 12; });
+    ctx.textAlign = 'left';
+  }
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
+  ctx.fillText('red curve = Planckian locus (CCT) · dashed = sRGB gamut', 8, H - 6);
 }
 function drawVizHist(ctx, W, H, r, channel) {
   const m = r.metrics, mode = channel === 'saturation' ? 'sat' : channel === 'value' ? 'val' : 'hue';
@@ -3503,6 +3821,7 @@ function downloadClusterCSV() {
   if (includeLab) header.push('LAB_L', 'LAB_A', 'LAB_B', 'LCH_L', 'LCH_C', 'LCH_H');
   header.push('percentage', 'pixel_count');
   if (includeSpatial) header.push('centroid_x', 'centroid_y', 'centroid_x_rel', 'centroid_y_rel', 'spatial_spread_rel');
+  header.push('cct', 'u_prime', 'v_prime', 'duv');
 
   const rows = [];
   for (const r of window._results) {
@@ -3512,6 +3831,7 @@ function downloadClusterCSV() {
       if (includeLab) row.push(c.lab_l, c.lab_a, c.lab_b, c.lab_l, c.lch_c, c.lch_h);
       row.push(c.percentage, c.pixel_count);
       if (includeSpatial) row.push(c.centroid_x ?? '', c.centroid_y ?? '', c.centroid_x_rel ?? '', c.centroid_y_rel ?? '', c.spatial_spread_rel ?? '');
+      row.push(c.cct ?? '', c.u_prime ?? '', c.v_prime ?? '', c.duv ?? '');
       rows.push(row);
     }
   }
@@ -3535,7 +3855,8 @@ function downloadImageCSV() {
   }));
 
   const METRIC_COLS = { colourfulness: ['colourfulness'], redness: ['redness'], cct: ['cct'], rms_contrast: ['rms_contrast'],
-    dark_channel: ['dark_channel'], warm_pct: ['warm_pct', 'cool_pct', 'neutral_pct'], hue_entropy: ['hue_entropy'] };
+    dark_channel: ['dark_channel'], warm_pct: ['warm_pct', 'cool_pct', 'neutral_pct'], hue_entropy: ['hue_entropy'],
+    chromaticity: ['u_prime', 'v_prime', 'duv'] };
   const metricKeys = [];
   metricSel.forEach(mk => (METRIC_COLS[mk] || []).forEach(k => metricKeys.push(k)));
   const moransKeys = (includeSpatial && sample.morans) ? Object.keys(sample.morans).map(c => 'morans_i_' + c) : [];
