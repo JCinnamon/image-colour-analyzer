@@ -128,7 +128,7 @@
       list-style: none;
     }
     .info-box summary::before { content: '▶ '; font-size: 0.65rem; opacity: 0.6; }
-    details[open] .info-box summary::before { content: '▼ '; }
+    details[open] .info-box summary::before, .info-box[open] > summary::before { content: '▼ '; }
     .info-box ul { margin: 0.55rem 0 0 1.1rem; color: var(--text); }
     .info-box ul li { margin-bottom: 3px; }
 
@@ -512,22 +512,25 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
 
 <div class="page-body">
 
-  <!-- Instructions (collapsible) -->
-  <details>
-    <div class="info-box">
-      <summary>How it works</summary>
-      <ul>
-        <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF (GPS, date, camera) is read from JPEGs and from PNGs carrying an eXIf chunk, including cut-outs exported by Image Cutter with GPS/EXIF preserved. Image URLs also work if the host allows cross-origin (CORS) access.</li>
-        <li><strong>Core settings</strong> — Analysis Precision sets the working resolution; Colour Clusters sets the k-means palette size (k-means++, fixed seed); Transparency Handling defaults to <em>Opaque pixels only</em> (composite onto white/black/grey are alternatives).</li>
-        <li><strong>Columns (collapsible)</strong> — choose which <strong>colour spaces</strong> (RGB, HSV, LAB, LCH), <strong>statistics</strong> (mean, median, std dev, range, IQR), and <strong>scene metrics</strong> to export, or use the Core / Full / Minimal presets. Each row has an "all" toggle. Hue is treated circularly (mean, median, circular variance). Scene metrics: colourfulness, redness index, CCT, RMS contrast, dark-channel haze, warm/cool/neutral, hue entropy. Column names follow a consistent SPACE_CHANNEL_STAT scheme (e.g. HSV_V_mean, LAB_L_median, LCH_C_range).</li>
-        <li><strong>Histogram table (collapsible)</strong> — export per-image histograms for any of hue, saturation, and value, in long format with a channel column.</li>
-        <li><strong>Imagery mode → 360° (top of Configuration)</strong> — switch to 360° for equirectangular, fisheye, or tiny-planet / azimuthal imagery. It exposes: an <strong>input projection</strong> (equirectangular, fisheye equidistant/equisolid, stereographic/tiny-planet, Lambert equal-area, equidistant azimuthal) with the matching <strong>solid-angle weighting</strong> so pixel counts don't bias means, medians, cluster percentages, histograms or colourfulness; an <strong>analysis frame</strong> choice — analyse natively in that projection, or <strong>convert to another projection first</strong> (e.g. Lambert equal-area for unbiased naive stats); a <strong>spatial mode</strong> (Cartesian x=azimuth/y=elevation, or <strong>polar</strong> with radial=elevation and angular=azimuth for disk frames); and a <strong>Convert &amp; export</strong> button that reprojects your queued images and downloads each as a 300 dpi PNG (tiny-planet figures, or to feed back in).</li>
-        <li><strong>Spatial structure (collapsible)</strong> — an X × Y grid (with an optional lock to each image's ratio for square cells) yields row/column colour profiles, a grid/tile table, per-cluster centroid and spatial spread, and <strong>Moran's I spatial autocorrelation</strong> computed per cell on any chosen channels or metrics (L*, C*ab, saturation, value, a*, b*, R, G, B, redness, CCT, colourfulness, RMS contrast, dark-channel).</li>
-        <li><strong>Visualization (collapsible)</strong> — enable per-image views and pick which to offer: Original image, Palette, Cluster-region image, Grid, Grid heatmap (coloured by a chosen channel/statistic with a legend), Row/column profile, and H/S/V histogram. Each opens from a dropdown on the result and downloads as a crisp PNG tagged at <strong>300 dpi</strong>.</li>
-        <li><strong>Dataset visualizations</strong> — across the whole set: a summed hue/saturation/value histogram, an aggregate palette (all dominant colours combined, sorted by hue), and a metric-distribution view (histogram of any image-level metric or Moran's I value, with mean and median marked). With Spatial structure on, also <strong>dataset spatial composites</strong> — a mean composite grid, a variability (SD) grid, mean elevation and azimuth profiles, and a cluster-centroid density map — with vertical (horizon→zenith / fixed) and azimuth (none / brightest column / compass N / sun) registration for frames that aren't perfectly aligned. Downloads as 300 dpi PNG.</li>
-        <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, histogram, and spatial (profiles, grid) tables, each downloadable as CSV. Everything runs locally; nothing is uploaded.</li>
-      </ul>
-    </div>
+  <!-- Quick start (always visible) + full instructions (collapsible) -->
+  <div class="info-box">
+    <strong>Quick start:</strong> 1&nbsp;·&nbsp;Drop in images or a folder — nothing is uploaded. 2&nbsp;·&nbsp;Review the <b>data check</b> suggestions and the Configuration (defaults suit ordinary flat photos; for 360° imagery choose <b>360° / wide-angle</b> under Imagery mode and a projection panel appears directly below it). 3&nbsp;·&nbsp;For 360° sky work, load a <b>geometry sidecar</b> from SunSync 360 in the projection panel — it gives each frame a true-north heading, which is what makes column profiles and cross-dataset comparisons mean anything. 4&nbsp;·&nbsp;<b>Analyze Images</b>, then read the <b>Data</b> tab for CSVs and dataset statistics, the <b>Visualization</b> tab for figures, and the <b>Compare</b> tab for two-set ΔE2000 checks and outlier flags.
+  </div>
+  <details class="info-box">
+    <summary>How it works — full guide</summary>
+    <ul>
+      <li><strong>Local files (recommended)</strong> — drag and drop images or select a folder. Nothing is uploaded; analysis happens in your browser. EXIF (GPS, date, camera) is read from JPEGs and from PNGs carrying an eXIf chunk, including cut-outs exported by Image Cutter with GPS/EXIF preserved. Image URLs also work if the host allows cross-origin (CORS) access.</li>
+      <li><strong>Core settings</strong> — Analysis resolution sets the working resolution; Colour Clusters sets the k-means palette size (k-means++, fixed seed, weighted when projection weighting is on); Transparency Handling defaults to <em>Opaque pixels only</em> (composite onto white/black/grey are alternatives).</li>
+      <li><strong>Columns (collapsible)</strong> — choose which <strong>colour spaces</strong> (RGB, HSV, LAB, LCH), <strong>statistics</strong> (mean, median, std dev, range, IQR), and <strong>scene metrics</strong> to export, or use the Core / Full / Minimal presets. Each row has an "all" toggle. Hue is treated circularly (mean, median, circular variance). Scene metrics: colourfulness, redness index, CCT, RMS contrast, dark-channel haze, warm/cool/neutral, hue entropy, and chromaticity (u′, v′, duv). Column names follow a consistent SPACE_CHANNEL_STAT scheme (e.g. HSV_V_mean, LAB_L_median, LCH_C_range).</li>
+      <li><strong>Geometry sidecar (SunSync 360)</strong> — an equirectangular frame's x axis is only a compass if you know which way the camera was pointing, and consumer 360 cameras do not record it. Load the geometry CSV that SunSync 360 exports and each frame gains a heading, joined on filename stem (the same key the Compare tab uses, so cut-outs renamed by Image Cutter still line up). The join is reported before you run: how many images matched, how many sidecar rows have no image here, and whether any matched frame is unregistered. Two things then become available. <strong>Register azimuth to true north</strong> rotates the sampling lattice so column 0 is north — it changes the column profile, the grid, Moran's I and cluster centroids, and deliberately leaves the <em>row</em> profile untouched, because elevation profiles are rotation-invariant and stay trustworthy on unregistered frames. <strong>Scattering-angle bins</strong> re-index every pixel by its angular distance from the sun (Θ) instead of by where it sits in the frame; that is the quantity scattering theory makes predictions about, and unlike frame position it means the same thing across dates, times and sites, so it is what allows two datasets to be compared. Note that annuli near Θ=0° and Θ=180° cover far less sky than those near 90°, so read the n column beside the colour. Frames whose sidecar row is gated or unregistered keep their raw axis rather than borrowing another frame's heading, and the image-summary CSV carries yaw_offset_deg, yaw_source and registration_status so any figure can state how its frames were registered.</li>
+      <li><strong>Histogram table (collapsible)</strong> — export per-image histograms for any of hue, saturation, and value, in long format with a channel column.</li>
+      <li><strong>Imagery mode → 360°</strong> — switch to 360° for equirectangular, fisheye, or tiny-planet / azimuthal imagery and a projection panel opens directly below the Imagery mode selector. It exposes: an <strong>input projection</strong> (equirectangular, fisheye equidistant/equisolid, stereographic/tiny-planet, Lambert equal-area, equidistant azimuthal) with the matching <strong>solid-angle weighting</strong> so pixel counts don't bias means, medians, cluster percentages, histograms or colourfulness; an <strong>analysis frame</strong> choice — analyse natively in that projection, or <strong>convert to another projection first</strong> (e.g. Lambert equal-area for unbiased naive stats); a <strong>spatial mode</strong> (Cartesian x=azimuth/y=elevation, or <strong>polar</strong> with radial=elevation and angular=azimuth for disk frames); and a <strong>Convert &amp; export</strong> button that reprojects your queued images and downloads each as a 300 dpi PNG (tiny-planet figures, or to feed back in).</li>
+      <li><strong>Spatial structure (collapsible)</strong> — an X × Y grid (with an optional lock to each image's ratio for square cells) yields row/column colour profiles, a grid/tile table, per-cluster centroid and spatial spread, and <strong>Moran's I spatial autocorrelation</strong> computed per cell on any chosen channels or metrics (L*, C*ab, saturation, value, a*, b*, R, G, B, redness, CCT, colourfulness, RMS contrast, dark-channel).</li>
+      <li><strong>Visualization (collapsible)</strong> — enable per-image views and pick which to offer: Original image, Palette, Cluster-region image, Grid, Grid heatmap (coloured by a chosen channel/statistic with a legend), Row/column profile, H/S/V histogram, and Chromaticity (u′v′). Each opens from a dropdown on the result and downloads as a crisp PNG tagged at <strong>300 dpi</strong>. A heatmap-palette selector switches the ramp used by heatmaps and dataset grids (viridis default; cividis; blue–yellow diverging, centred at 0 for b*).</li>
+      <li><strong>Dataset visualizations</strong> — across the whole set: a summed hue/saturation/value histogram, an aggregate palette (all dominant colours combined, sorted by hue), and a metric-distribution view (histogram of any image-level metric or Moran's I value, with mean and median marked). With Spatial structure on, also <strong>dataset spatial composites</strong> — a mean composite grid, a variability (SD) grid, mean elevation and azimuth profiles, and a cluster-centroid density map — with vertical (horizon→zenith / fixed) and azimuth (none / brightest column / compass N / sun) registration for frames that aren't perfectly aligned. Downloads as 300 dpi PNG.</li>
+      <li><strong>Compare tab</strong> — beside Data / Visualization, always available: runs two-set ΔE2000 comparisons (matched on filename stems, with unmatched files reported) and flags outlier images in the current results.</li>
+      <li><strong>Outputs</strong> — cluster-level, image-level, and optional pixel-level, histogram, and spatial (profiles, grid) tables, each downloadable as CSV. Everything runs locally; nothing is uploaded.</li>
+    </ul>
   </details>
 
   <!-- Input -->
@@ -565,8 +568,104 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
         <div class="hint">Choose 360° for equirectangular, fisheye, or tiny-planet / azimuthal imagery to enable solid-angle weighting, projection conversion, and polar spatial analysis.</div>
       </div>
 
+      <div class="field full-width">
+      <details class="cfg-sec" id="sec360" style="display:none;border:1px solid var(--accent);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
+                <summary style="cursor:pointer;font-weight:600">360° imagery — projection, weighting &amp; conversion</summary>
+                <div style="margin-top:.5rem;display:flex;gap:.9rem;flex-wrap:wrap;align-items:flex-start">
+                  <div class="proj-left">
+                    <div class="cfg-row" style="gap:.4rem">
+                      <span class="hint" style="margin:0">Input</span>
+                      <select id="projType" class="proj-sel" onchange="updateProjUI();updateProjPreview()" title="The projection your source images are already in. Each carries the correct solid-angle weighting.">
+                        <option value="equirect">Equirectangular (360°)</option>
+                        <option value="fisheye_equidistant">Fisheye — equidistant</option>
+                        <option value="fisheye_equisolid">Fisheye — equisolid</option>
+                        <option value="stereographic">Stereographic / tiny-planet</option>
+                        <option value="lambert">Lambert equal-area</option>
+                        <option value="azimuthal_equidistant">Azimuthal — equidistant</option>
+                      </select>
+                      <button type="button" class="btn btn-outline btn-sm" onclick="toggleProjInfo(event)" title="Settings help" style="padding:2px 7px">ⓘ</button>
+                    </div>
+                    <div class="cfg-row" id="projEquirect" style="gap:.35rem">
+                      <span class="hint" style="margin:0" title="Elevation of the top and bottom image rows. 90 = zenith (up), 0 = horizon; full sphere = 90 to −90.">Elev°</span>
+                      <label style="margin:0" title="Top row elevation (90 = zenith)">top <input type="number" id="projTop" value="90" min="-90" max="90" step="1" style="width:52px" oninput="updateProjUI()"></label>
+                      <label style="margin:0" title="Bottom row elevation. Full 360° photo = −90 (nadir); upper-hemisphere sky crop = 0 (horizon)">bot <input type="number" id="projBottom" value="-90" min="-90" max="90" step="1" style="width:52px" oninput="updateProjUI()"></label>
+                      <span class="hint" style="margin:0">full 360° = 90 / −90</span>
+                    </div>
+                    <div class="cfg-row" id="projFisheye" style="display:none;gap:.35rem">
+                      <span class="hint" style="margin:0" title="Full angular diameter the disk spans. 180 = horizon at the rim, zenith-centred. Disk assumed centred, radius = min(w,h)/2.">Full angle°</span>
+                      <input type="number" id="projFov" value="180" min="30" max="360" step="1" style="width:56px" oninput="updateProjPreview()">
+                    </div>
+                    <div class="cfg-row" style="gap:.4rem">
+                      <span class="hint" style="margin:0">Frame</span>
+                      <select id="analysisFrame" class="proj-sel" onchange="updateProjUI();updateProjPreview()" title="Native = analyse in the input projection with matched weighting. Convert-first = reproject to another projection (e.g. Lambert equal-area) before analysis.">
+                        <option value="native">Native (matched weighting)</option>
+                        <option value="convert">Convert first</option>
+                      </select>
+                      <select id="convType" class="proj-sel" style="display:none" onchange="updateProjUI()" title="Target projection to reproject into before analysis. Lambert equal-area makes naive pixel stats unbiased.">
+                        <option value="lambert">→ Lambert equal-area</option>
+                        <option value="equirect">→ Equirectangular</option>
+                        <option value="stereographic">→ Stereographic</option>
+                        <option value="azimuthal_equidistant">→ Azimuthal equidistant</option>
+                      </select>
+                      <label id="convFovL" style="margin:0;display:none" title="Angular diameter of the target disk (edge/2 = the largest zenith angle shown). Auto-set from your elevation range to cover the whole source; edit to crop.">edge° <input type="number" id="convFov" value="360" min="30" max="360" step="1" style="width:50px" oninput="updateProjPreview()"></label>
+                    </div>
+                    <div class="cfg-row" style="gap:.4rem">
+                      <span class="hint" style="margin:0">Spatial</span>
+                      <select id="spatialMode" class="proj-sel" title="Cartesian = x·y grid (azimuth × elevation). Polar = rings × wedges — only valid on a disk/azimuthal analysis frame.">
+                        <option value="cartesian">Cartesian grid</option>
+                        <option value="polar">Polar (rings × wedges)</option>
+                      </select>
+                      <span class="hint" id="spatialHint" style="margin:0"></span>
+                    </div>
+                    <div class="cfg-row" style="gap:.4rem;flex-wrap:wrap">
+                      <span class="hint" style="margin:0">Geometry</span>
+                      <input type="file" id="geomFile" accept=".csv,.json" style="max-width:230px;font-size:.78rem" onchange="loadGeometrySidecar(this)" title="Geometry sidecar exported by SunSync 360 — supplies each frame's camera heading and solar position.">
+                      <button type="button" class="btn btn-outline btn-sm" onclick="clearGeometrySidecar()" title="Forget the loaded sidecar">clear</button>
+                      <label style="margin:0;display:inline-flex;align-items:center;gap:4px" title="Rotate the azimuth axis of column profiles, grid cells and Moran's I so that column 0 is true north. Row/elevation profiles are rotation-invariant and are unaffected."><input type="checkbox" id="geomApplyAz" checked> register azimuth to true north</label>
+                      <label style="margin:0;display:inline-flex;align-items:center;gap:4px" title="Bin sky by angular distance from the sun instead of by frame position — the quantity scattering theory predicts, and the one that is comparable across dates and sites."><input type="checkbox" id="geomScat"> scattering-angle bins</label>
+                      <input type="number" id="geomScatBin" value="15" min="2" max="45" step="1" style="width:52px" title="Scattering-angle bin width, degrees">
+                      <span class="hint" style="margin:0">°</span>
+                    </div>
+                    <div class="cfg-row" style="gap:.4rem"><span id="geomStatus" class="hint" style="margin:0"></span></div>
+                    <div class="cfg-row" style="gap:.4rem">
+                      <span class="hint" style="margin:0">Extent</span>
+                      <select id="cfgExtent" class="proj-sel" title="What every visualization covers: the occupied band (rows that actually contain data) or the full frame including empty rows." onchange="setDsExtent(this.value)">
+                        <option value="band">Occupied band</option>
+                        <option value="full">Full frame</option>
+                      </select>
+                      <span class="hint" style="margin:0">Vert</span>
+                      <select id="cfgValign" class="proj-sel" title="Shared = one transform for every image, so absolute position is comparable. Per-image = each frame normalised to its own extent; only for sets whose frames genuinely differ." onchange="setDsValign(this.value)">
+                        <option value="fixed">Shared (absolute)</option>
+                        <option value="mask">Per-image (normalised)</option>
+                      </select>
+                      <span class="hint" style="margin:0">Azimuth</span>
+                      <select id="cfgHalign" class="proj-sel" title="Rotate frames to a common bearing before compositing. Use none for a fixed camera — its frames are already registered." onchange="setDsHalign(this.value)">
+                        <option value="none">none</option>
+                        <option value="bright">brightest col</option>
+                        <option value="north">compass N</option>
+                        <option value="sun">sun</option>
+                      </select>
+                    </div>
+                    <div class="cfg-row" style="gap:.4rem">
+                      <span class="hint" style="margin:0">Export</span>
+                      <label style="margin:0" title="Longest side (px) of each reprojected image">px <input type="number" id="convOutPx" value="1200" min="200" max="4000" step="50" style="width:58px" disabled></label>
+                      <button type="button" id="convBtn" class="btn btn-outline btn-sm" onclick="convertAndDownload()" title="Choose ‘Convert first’ to enable. Reprojects every queued file to the Convert-to projection and downloads them as a ZIP" disabled>⬇ reprojected images (Zip)</button>
+                      <span class="hint" style="margin:0">needs “Convert first”</span>
+                    </div>
+                  </div>
+                  <div style="flex:0 0 auto;text-align:center">
+                    <canvas id="projPreview" width="280" height="210" style="border:1px solid var(--border);border-radius:4px;background:#f7fafc"></canvas>
+                    <div class="hint" style="margin:.2rem 0 0">preview — first image in the analysis frame</div>
+                  </div>
+                </div>
+                <div id="projInfo" style="display:none;margin-top:.5rem;padding:.5rem .65rem;background:var(--accent-light);border-radius:6px;font-size:.78rem;line-height:1.5">
+                  <b>Choosing settings.</b> <b>Equirectangular</b>: a standard 360 photo is 2:1 = 360°×180° — set Elev <b>top 90 / bottom −90</b> (zenith to nadir). Use 90 / 0 only if your image is an upper-hemisphere crop (horizon at the bottom row). This range drives the cos(elevation) weighting and, when converting, which rows are sampled — so it must match your actual image. The disk <b>edge°</b> auto-fills from this range to cover the whole source (edge = 2·(top−bottom): 90/−90 → 360 full sphere; 90/0 → 180 hemisphere); edit it to crop. <b>Fisheye</b>: circular, centred — set Full angle to the lens FOV (usually 180); equidistant needs weighting, equisolid is already equal-area. <b>Stereographic / tiny-planet</b>: zenith-centred disk, Full angle 180 = horizon at the rim; the rim is hugely stretched (down-weighted ∝ cos⁴(θ/2)) — best for figures, not naive stats. <b>Lambert equal-area</b>: equal-area disk — naive stats are unbiased (good convert-first target). <b>Azimuthal equidistant</b>: radius ∝ elevation angle. &nbsp;<b>Frame</b>: use <i>Native</i> to keep resolution (weighting corrects the bias), or <i>Convert first → Lambert</i> for an unbiased equal-area analysis. <b>Spatial</b>: pick <i>Polar</i> for disk/azimuthal frames so grids and profiles read as rings (elevation) and wedges (azimuth).
+                </div>
+              </details>
+      </div>
+
       <div class="field">
-        <label for="precision">Analysis Precision</label>
+        <label for="precision">Analysis resolution</label>
         <select id="precision">
           <option value="50">Very Low (50px) — Fastest</option>
           <option value="75">Low (75px) — Fast</option>
@@ -670,7 +769,7 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
           <div style="margin-top:.55rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <label style="min-width:230px;margin:0"><input type="checkbox" id="includePixel" onchange="toggleOpt()"> Pixel-level table (large!)</label>
             <input type="number" id="pixelStep" value="1" min="1" max="200" step="1" disabled style="width:64px">
-            <span class="hint" style="margin:0">keep every Nth analyzed pixel (caps file size)</span>
+            <span class="hint" style="margin:0">keep ~1-in-N analyzed pixels, seeded random sample (caps file size, avoids striding artifacts)</span>
           </div>
         </details>
 
@@ -707,90 +806,6 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
           </div>
         </details>
 
-        <details class="cfg-sec" id="sec360" style="display:none;border:1px solid var(--accent);border-radius:8px;padding:.45rem .7rem;margin-bottom:.55rem">
-          <summary style="cursor:pointer;font-weight:600">360° imagery — projection, weighting &amp; conversion</summary>
-          <div style="margin-top:.5rem;display:flex;gap:.9rem;flex-wrap:wrap;align-items:flex-start">
-            <div class="proj-left">
-              <div class="cfg-row" style="gap:.4rem">
-                <span class="hint" style="margin:0">Input</span>
-                <select id="projType" class="proj-sel" onchange="updateProjUI();updateProjPreview()" title="The projection your source images are already in. Each carries the correct solid-angle weighting.">
-                  <option value="equirect">Equirectangular (360°)</option>
-                  <option value="fisheye_equidistant">Fisheye — equidistant</option>
-                  <option value="fisheye_equisolid">Fisheye — equisolid</option>
-                  <option value="stereographic">Stereographic / tiny-planet</option>
-                  <option value="lambert">Lambert equal-area</option>
-                  <option value="azimuthal_equidistant">Azimuthal — equidistant</option>
-                </select>
-                <button type="button" class="btn btn-outline btn-sm" onclick="toggleProjInfo(event)" title="Settings help" style="padding:2px 7px">ⓘ</button>
-              </div>
-              <div class="cfg-row" id="projEquirect" style="gap:.35rem">
-                <span class="hint" style="margin:0" title="Elevation of the top and bottom image rows. 90 = zenith (up), 0 = horizon; full sphere = 90 to −90.">Elev°</span>
-                <label style="margin:0" title="Top row elevation (90 = zenith)">top <input type="number" id="projTop" value="90" min="-90" max="90" step="1" style="width:52px" oninput="updateProjUI()"></label>
-                <label style="margin:0" title="Bottom row elevation. Full 360° photo = −90 (nadir); upper-hemisphere sky crop = 0 (horizon)">bot <input type="number" id="projBottom" value="-90" min="-90" max="90" step="1" style="width:52px" oninput="updateProjUI()"></label>
-                <span class="hint" style="margin:0">full 360° = 90 / −90</span>
-              </div>
-              <div class="cfg-row" id="projFisheye" style="display:none;gap:.35rem">
-                <span class="hint" style="margin:0" title="Full angular diameter the disk spans. 180 = horizon at the rim, zenith-centred. Disk assumed centred, radius = min(w,h)/2.">Full angle°</span>
-                <input type="number" id="projFov" value="180" min="30" max="360" step="1" style="width:56px" oninput="updateProjPreview()">
-              </div>
-              <div class="cfg-row" style="gap:.4rem">
-                <span class="hint" style="margin:0">Frame</span>
-                <select id="analysisFrame" class="proj-sel" onchange="updateProjUI();updateProjPreview()" title="Native = analyse in the input projection with matched weighting. Convert-first = reproject to another projection (e.g. Lambert equal-area) before analysis.">
-                  <option value="native">Native (matched weighting)</option>
-                  <option value="convert">Convert first</option>
-                </select>
-                <select id="convType" class="proj-sel" style="display:none" onchange="updateProjUI()" title="Target projection to reproject into before analysis. Lambert equal-area makes naive pixel stats unbiased.">
-                  <option value="lambert">→ Lambert equal-area</option>
-                  <option value="equirect">→ Equirectangular</option>
-                  <option value="stereographic">→ Stereographic</option>
-                  <option value="azimuthal_equidistant">→ Azimuthal equidistant</option>
-                </select>
-                <label id="convFovL" style="margin:0;display:none" title="Angular diameter of the target disk (edge/2 = the largest zenith angle shown). Auto-set from your elevation range to cover the whole source; edit to crop.">edge° <input type="number" id="convFov" value="360" min="30" max="360" step="1" style="width:50px" oninput="updateProjPreview()"></label>
-              </div>
-              <div class="cfg-row" style="gap:.4rem">
-                <span class="hint" style="margin:0">Spatial</span>
-                <select id="spatialMode" class="proj-sel" title="Cartesian = x·y grid (azimuth × elevation). Polar = rings × wedges — only valid on a disk/azimuthal analysis frame.">
-                  <option value="cartesian">Cartesian grid</option>
-                  <option value="polar">Polar (rings × wedges)</option>
-                </select>
-                <span class="hint" id="spatialHint" style="margin:0"></span>
-              </div>
-              <div class="cfg-row" style="gap:.4rem">
-                <span class="hint" style="margin:0">Extent</span>
-                <select id="cfgExtent" class="proj-sel" title="What every visualization covers: the occupied band (rows that actually contain data) or the full frame including empty rows." onchange="setDsExtent(this.value)">
-                  <option value="band">Occupied band</option>
-                  <option value="full">Full frame</option>
-                </select>
-                <span class="hint" style="margin:0">Vert</span>
-                <select id="cfgValign" class="proj-sel" title="Shared = one transform for every image, so absolute position is comparable. Per-image = each frame normalised to its own extent; only for sets whose frames genuinely differ." onchange="setDsValign(this.value)">
-                  <option value="fixed">Shared (absolute)</option>
-                  <option value="mask">Per-image (normalised)</option>
-                </select>
-                <span class="hint" style="margin:0">Azimuth</span>
-                <select id="cfgHalign" class="proj-sel" title="Rotate frames to a common bearing before compositing. Use none for a fixed camera — its frames are already registered." onchange="setDsHalign(this.value)">
-                  <option value="none">none</option>
-                  <option value="bright">brightest col</option>
-                  <option value="north">compass N</option>
-                  <option value="sun">sun</option>
-                </select>
-              </div>
-              <div class="cfg-row" style="gap:.4rem">
-                <span class="hint" style="margin:0">Export</span>
-                <label style="margin:0" title="Longest side (px) of each reprojected image">px <input type="number" id="convOutPx" value="1200" min="200" max="4000" step="50" style="width:58px" disabled></label>
-                <button type="button" id="convBtn" class="btn btn-outline btn-sm" onclick="convertAndDownload()" title="Choose ‘Convert first’ to enable. Reprojects every queued file to the Convert-to projection and downloads them as a ZIP" disabled>⬇ reprojected images (Zip)</button>
-                <span class="hint" style="margin:0">needs “Convert first”</span>
-              </div>
-            </div>
-            <div style="flex:0 0 auto;text-align:center">
-              <canvas id="projPreview" width="280" height="210" style="border:1px solid var(--border);border-radius:4px;background:#f7fafc"></canvas>
-              <div class="hint" style="margin:.2rem 0 0">preview — first image in the analysis frame</div>
-            </div>
-          </div>
-          <div id="projInfo" style="display:none;margin-top:.5rem;padding:.5rem .65rem;background:var(--accent-light);border-radius:6px;font-size:.78rem;line-height:1.5">
-            <b>Choosing settings.</b> <b>Equirectangular</b>: a standard 360 photo is 2:1 = 360°×180° — set Elev <b>top 90 / bottom −90</b> (zenith to nadir). Use 90 / 0 only if your image is an upper-hemisphere crop (horizon at the bottom row). This range drives the cos(elevation) weighting and, when converting, which rows are sampled — so it must match your actual image. The disk <b>edge°</b> auto-fills from this range to cover the whole source (edge = 2·(top−bottom): 90/−90 → 360 full sphere; 90/0 → 180 hemisphere); edit it to crop. <b>Fisheye</b>: circular, centred — set Full angle to the lens FOV (usually 180); equidistant needs weighting, equisolid is already equal-area. <b>Stereographic / tiny-planet</b>: zenith-centred disk, Full angle 180 = horizon at the rim; the rim is hugely stretched (down-weighted ∝ cos⁴(θ/2)) — best for figures, not naive stats. <b>Lambert equal-area</b>: equal-area disk — naive stats are unbiased (good convert-first target). <b>Azimuthal equidistant</b>: radius ∝ elevation angle. &nbsp;<b>Frame</b>: use <i>Native</i> to keep resolution (weighting corrects the bias), or <i>Convert first → Lambert</i> for an unbiased equal-area analysis. <b>Spatial</b>: pick <i>Polar</i> for disk/azimuthal frames so grids and profiles read as rings (elevation) and wedges (azimuth).
-          </div>
-        </details>
-
         <details class="cfg-sec" open style="border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem">
           <summary style="cursor:pointer;font-weight:600">Visualization</summary>
           <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem">
@@ -806,22 +821,6 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
               <label><input type="checkbox" class="vizType" value="hist" checked> Histogram</label>
               <label><input type="checkbox" class="vizType" value="chroma"> Chromaticity (u&prime;v&prime;)</label>
             </div>
-          </div>
-        </details>
-        <details id="secCompare">
-          <summary style="cursor:pointer;font-weight:600">Compare two sets (&Delta;E2000)</summary>
-          <div style="margin-top:.55rem;display:flex;flex-direction:column;gap:.55rem">
-            <div class="sub">Loads and analyzes two sets of images under the current Configuration (precision, transparency, projection &amp; weighting), matches files by filename, and reports the CIEDE2000 perceptual colour difference per matched pair &mdash; e.g. the same frames processed two ways (camera white balance vs a fixed reference), or two capture conditions.</div>
-            <div class="cfg-row" style="gap:1rem;flex-wrap:wrap">
-              <label style="margin:0">Set A <input type="file" id="cmpFilesA" multiple accept="image/*"></label>
-              <label style="margin:0">Set B <input type="file" id="cmpFilesB" multiple accept="image/*"></label>
-            </div>
-            <div class="cfg-row" style="gap:.6rem">
-              <button class="btn btn-outline btn-sm" onclick="runCompare()">Analyze &amp; compare</button>
-              <button class="btn btn-outline btn-sm" onclick="checkOutliers()" title="Uses the CURRENT single-queue results above &mdash; flags images whose colour sits furthest (by &Delta;E2000) from the dataset's weighted-mean colour.">Flag outliers in current results</button>
-              <span id="cmpStatus" class="sub" style="margin:0"></span>
-            </div>
-            <div id="cmpResults"></div>
           </div>
         </details>
       </div>
@@ -915,6 +914,20 @@ function labToLch(L, a, b) {
   let H = Math.atan2(b, a) * 180 / Math.PI;
   if (H < 0) H += 360;
   return [Math.round(C * 100) / 100, Math.round(H * 100) / 100];
+}
+
+// CIELAB (D65) → sRGB — exact inverse of rgbToLab; returns [r,g,b] each 0-255 (unrounded, clamped)
+function labToRgb(L, a, b) {
+  const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+  const finv = t => (t * t * t > 0.008856 ? t * t * t : (t - 16 / 116) / 7.787);
+  let x = finv(fx) * 0.95047, y = finv(fy) * 1.00000, z = finv(fz) * 1.08883;
+  // XYZ (D65) → linear sRGB
+  let rl =  x * 3.2404542 + y * -1.5371385 + z * -0.4985314;
+  let gl = -x * 0.9692660 + y *  1.8760108 + z *  0.0415560;
+  let bl =  x * 0.0556434 + y * -0.2040259 + z *  1.0572252;
+  const gam = c => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(Math.max(0, c), 1 / 2.4) - 0.055);
+  const clamp = c => Math.max(0, Math.min(255, gam(c) * 255));
+  return [clamp(rl), clamp(gl), clamp(bl)];
 }
 
 // Correlated colour temperature (K) from mean RGB, via CIE xy + McCamy's approximation
@@ -1029,49 +1042,57 @@ function rgbToCCT(r, g, b) {
   return (cct > 0 && cct < 100000) ? Math.round(cct) : null;
 }
 
-// ── K-means (k-means++ init, fixed seed) ────────────────────────────
-// pixels: Uint8Array/array, flat [r,g,b, r,g,b, ...]
-function kmeans(pixels, k, seed = 42, maxIter = 40) {
-  const n = pixels.length / 3;
+// ── K-means (k-means++ init, fixed seed; space-agnostic, optional per-point weights) ────
+// points: Uint8Array/Float64Array/array, flat [c1,c2,c3, c1,c2,c3, ...] — any 3-channel colour space (RGB, Lab, ...)
+// weights: optional Float32Array/array aligned to point index (length n), e.g. solid-angle weighting; null/omitted = uniform weight 1
+function kmeans(points, k, seed = 42, maxIter = 40, weights = null) {
+  const n = points.length / 3;
   if (n === 0 || k < 1) return null;
   k = Math.min(k, n);
   const rand = mulberry32(seed);
+  const wAt = i => (weights ? weights[i] : 1);
 
-  // k-means++ initialisation
+  // k-means++ initialisation — seed probability ∝ weight × distance² to nearest existing center
   const centers = new Float64Array(k * 3);
-  const firstIdx = Math.floor(rand() * n) * 3;
-  centers[0] = pixels[firstIdx]; centers[1] = pixels[firstIdx + 1]; centers[2] = pixels[firstIdx + 2];
+  let firstIdx = 0;
+  {
+    let total = 0; for (let i = 0; i < n; i++) total += wAt(i);
+    let target = rand() * total;
+    for (let i = 0; i < n; i++) { target -= wAt(i); if (target <= 0) { firstIdx = i; break; } firstIdx = i; }
+  }
+  centers[0] = points[firstIdx * 3]; centers[1] = points[firstIdx * 3 + 1]; centers[2] = points[firstIdx * 3 + 2];
   const minDist = new Float64Array(n).fill(Infinity);
 
   for (let c = 1; c < k; c++) {
     let total = 0;
     const pc = (c - 1) * 3;
     for (let i = 0; i < n; i++) {
-      const dr = pixels[i * 3]     - centers[pc];
-      const dg = pixels[i * 3 + 1] - centers[pc + 1];
-      const db = pixels[i * 3 + 2] - centers[pc + 2];
+      const dr = points[i * 3]     - centers[pc];
+      const dg = points[i * 3 + 1] - centers[pc + 1];
+      const db = points[i * 3 + 2] - centers[pc + 2];
       const d = dr * dr + dg * dg + db * db;
       if (d < minDist[i]) minDist[i] = d;
-      total += minDist[i];
+      total += minDist[i] * wAt(i);
     }
     let target = rand() * total, idx = 0;
     for (let i = 0; i < n; i++) {
-      target -= minDist[i];
+      target -= minDist[i] * wAt(i);
       if (target <= 0) { idx = i; break; }
       idx = i;
     }
-    centers[c * 3] = pixels[idx * 3]; centers[c * 3 + 1] = pixels[idx * 3 + 1]; centers[c * 3 + 2] = pixels[idx * 3 + 2];
+    centers[c * 3] = points[idx * 3]; centers[c * 3 + 1] = points[idx * 3 + 1]; centers[c * 3 + 2] = points[idx * 3 + 2];
   }
 
   const labels = new Int32Array(n);
-  const counts = new Float64Array(k);
+  const counts = new Float64Array(k);   // unweighted pixel counts (for reference/display)
+  const wsums  = new Float64Array(k);   // weighted mass per cluster (drives the centroid update)
   const sums   = new Float64Array(k * 3);
 
   for (let iter = 0; iter < maxIter; iter++) {
     // Assignment
     let changed = 0;
     for (let i = 0; i < n; i++) {
-      const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
+      const r = points[i * 3], g = points[i * 3 + 1], b = points[i * 3 + 2];
       let best = 0, bestD = Infinity;
       for (let c = 0; c < k; c++) {
         const dr = r - centers[c * 3], dg = g - centers[c * 3 + 1], db = b - centers[c * 3 + 2];
@@ -1080,30 +1101,31 @@ function kmeans(pixels, k, seed = 42, maxIter = 40) {
       }
       if (labels[i] !== best) { labels[i] = best; changed++; }
     }
-    // Update
-    counts.fill(0); sums.fill(0);
+    // Update — weighted centroid: sum(weight_i * point_i) / sum(weight_i)
+    counts.fill(0); wsums.fill(0); sums.fill(0);
     for (let i = 0; i < n; i++) {
-      const c = labels[i];
+      const c = labels[i], wi = wAt(i);
       counts[c]++;
-      sums[c * 3]     += pixels[i * 3];
-      sums[c * 3 + 1] += pixels[i * 3 + 1];
-      sums[c * 3 + 2] += pixels[i * 3 + 2];
+      wsums[c] += wi;
+      sums[c * 3]     += points[i * 3]     * wi;
+      sums[c * 3 + 1] += points[i * 3 + 1] * wi;
+      sums[c * 3 + 2] += points[i * 3 + 2] * wi;
     }
     for (let c = 0; c < k; c++) {
-      if (counts[c] > 0) {
-        centers[c * 3]     = sums[c * 3]     / counts[c];
-        centers[c * 3 + 1] = sums[c * 3 + 1] / counts[c];
-        centers[c * 3 + 2] = sums[c * 3 + 2] / counts[c];
+      if (wsums[c] > 0) {
+        centers[c * 3]     = sums[c * 3]     / wsums[c];
+        centers[c * 3 + 1] = sums[c * 3 + 1] / wsums[c];
+        centers[c * 3 + 2] = sums[c * 3 + 2] / wsums[c];
       } else {
-        // Re-seed empty cluster at a random pixel
+        // Re-seed empty cluster at a random point
         const ri = Math.floor(rand() * n) * 3;
-        centers[c * 3] = pixels[ri]; centers[c * 3 + 1] = pixels[ri + 1]; centers[c * 3 + 2] = pixels[ri + 2];
+        centers[c * 3] = points[ri]; centers[c * 3 + 1] = points[ri + 1]; centers[c * 3 + 2] = points[ri + 2];
       }
     }
     if (changed === 0) break;
   }
 
-  return { centers, counts, labels, k, n };
+  return { centers, counts, wsums, labels, k, n };
 }
 
 // ── Whole-image summary metrics ─────────────────────────────────────
@@ -1540,7 +1562,132 @@ function cellChanVal(o, ch) {
   return ({ R: o.mean_r, G: o.mean_g, B: o.mean_b, S: o.saturation, V: o.value, L: o.lightness, a: o.lab_a, b: o.lab_b, C: o.chroma,
     red: o.redness, cct: o.cct, colf: o.colf, rms: o.rms, dark: o.dark })[ch];
 }
-function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels, weights, wrapX) {
+
+// ── Geometry sidecar (SunSync 360) ───────────────────────────────────
+// One row per frame: the camera heading recovered from the sun, plus the
+// sun's own position. Joined on filename stem, the same key runCompare()
+// uses, so cut-outs renamed by Image Cutter still line up.
+window._geom = null;
+function _geomStemKey(name) {
+  let t = String(name || '').replace(/\.[^.]+$/, '');
+  t = t.replace(/^cutter_/, '');
+  t = t.replace(/_(cutout|inverse|mask|north)$/, '');
+  return t;
+}
+function _parseCsvLine(line) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur); return out;
+}
+function parseGeometryCsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+  if (!lines.length) return null;
+  const head = _parseCsvLine(lines[0]).map(h => h.trim());
+  const ix = n => head.indexOf(n);
+  const iName = ix('filename') >= 0 ? ix('filename') : ix('filename_stem');
+  if (iName < 0) return null;
+  const cols = { yaw: ix('yaw_offset_deg'), src: ix('yaw_source'), stat: ix('registration_status'), ds: ix('dataset'),
+                 sel: ix('solar_elevation_deg'), saz: ix('solar_azimuth_deg'), am: ix('air_mass'),
+                 res: ix('elev_residual_deg'), conf: ix('yaw_confidence') };
+  const byStem = new Map();
+  for (let i = 1; i < lines.length; i++) {
+    const f = _parseCsvLine(lines[i]);
+    if (f.length < head.length) continue;
+    const num = j => (j >= 0 && f[j] !== '' && isFinite(+f[j])) ? +f[j] : null;
+    const rec = { filename: f[iName], yaw: num(cols.yaw), yawSource: cols.src >= 0 ? f[cols.src] : '', dataset: cols.ds >= 0 ? f[cols.ds] : '',
+                  status: cols.stat >= 0 ? f[cols.stat] : '', solarEl: num(cols.sel), solarAz: num(cols.saz),
+                  airMass: num(cols.am), resid: num(cols.res), conf: num(cols.conf) };
+    byStem.set(_geomStemKey(rec.filename), rec);
+  }
+  return byStem.size ? byStem : null;
+}
+function parseGeometryJson(text) {
+  const o = JSON.parse(text);
+  const arr = o.frames || o;
+  if (!Array.isArray(arr)) return null;
+  const byStem = new Map();
+  for (const r of arr) {
+    const nm = r.filename || r.filename_stem; if (!nm) continue;
+    const num = v => (v === '' || v == null || !isFinite(+v)) ? null : +v;
+    byStem.set(_geomStemKey(nm), { filename: nm, yaw: num(r.yaw_offset_deg), yawSource: r.yaw_source || '', dataset: r.dataset || '',
+      status: r.registration_status || '', solarEl: num(r.solar_elevation_deg), solarAz: num(r.solar_azimuth_deg),
+      airMass: num(r.air_mass), resid: num(r.elev_residual_deg), conf: num(r.yaw_confidence) });
+  }
+  return byStem.size ? byStem : null;
+}
+async function loadGeometrySidecar(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const byStem = /\.json$/i.test(file.name) ? parseGeometryJson(text) : parseGeometryCsv(text);
+    if (!byStem) throw new Error('no usable rows — expected a SunSync 360 geometry CSV or JSON with a filename column');
+    window._geom = { byStem, name: file.name };
+    log(`Geometry sidecar: ${byStem.size} frame(s) from ${file.name}`);
+    reportGeometryJoin();
+  } catch (e) {
+    window._geom = null;
+    document.getElementById('geomStatus').innerHTML = `<span style="color:var(--danger)">Could not read that sidecar: ${escapeHtml(e.message)}</span>`;
+  }
+}
+function clearGeometrySidecar() {
+  window._geom = null;
+  const el = document.getElementById('geomFile'); if (el) el.value = '';
+  document.getElementById('geomStatus').textContent = '';
+}
+function geomFor(filename) {
+  if (!window._geom) return null;
+  return window._geom.byStem.get(_geomStemKey(filename)) || null;
+}
+// Report the join the way runCompare() does — a sidecar that silently matches
+// nothing is the failure mode worth shouting about.
+function reportGeometryJoin(queuedNames) {
+  const el = document.getElementById('geomStatus'); if (!el) return;
+  if (!window._geom) { el.textContent = ''; return; }
+  const names = queuedNames || (typeof queuedFiles !== 'undefined' ? queuedFiles.map(f => f.name) : []);
+  const total = window._geom.byStem.size;
+  if (!names.length) { el.innerHTML = `<b>${total}</b> frame(s) loaded from ${escapeHtml(window._geom.name)}. Queue some images to see how many match.`; return; }
+  let matched = 0; const missing = [];
+  const seen = new Set();
+  for (const n of names) { const k = _geomStemKey(n); seen.add(k); if (window._geom.byStem.has(k)) matched++; else missing.push(n); }
+  let onlySidecar = 0; window._geom.byStem.forEach((_, k) => { if (!seen.has(k)) onlySidecar++; });
+  const pct = names.length ? Math.round(100 * matched / names.length) : 0;
+  let msg = `<b>${matched}/${names.length}</b> queued image(s) matched to the sidecar (${pct}%)`;
+  if (missing.length) msg += ` · ${missing.length} with no geometry row`;
+  if (onlySidecar) msg += ` · ${onlySidecar} sidecar row(s) with no image here`;
+  const reg = [];
+  window._geom.byStem.forEach(r => { if (seen.has(_geomStemKey(r.filename)) && r.status && r.status !== 'accepted') reg.push(r.status); });
+  if (reg.length) msg += ` · <span style="color:var(--warning-border)">${reg.length} matched frame(s) are not registered (${[...new Set(reg)].join(', ')}) — their azimuth stays unregistered</span>`;
+  el.innerHTML = pct < 50
+    ? `<span style="color:var(--danger)">${msg}. Check that these are the same files SunSync registered.</span>`
+    : msg;
+}
+
+/* azOffDeg — the camera's yaw offset from SunSync 360. Frame azimuth = bearing + yaw,
+   so subtracting it turns the x axis into a true compass bearing with column 0 at north.
+   Applied to the column profile, the grid (and therefore Moran's I) and cluster centroids.
+   The ROW profile is deliberately untouched: it is rotation-invariant by construction,
+   which is exactly why it stays trustworthy on unregistered frames.
+   scat — {top, bottom, sunEl, sunAz, bin}: bins every pixel by its angular distance from
+   the sun instead of by where it happens to sit in the frame. */
+function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels, weights, wrapX, azOffDeg, scat) {
+  const useAz = wrapX && azOffDeg != null && isFinite(azOffDeg) && azOffDeg !== 0;
+  const azShift = useAz ? (azOffDeg / 360) * w : 0;
+  const SNB = (scat && scat.bin > 0) ? scat.bin : 15;
+  const NSB = scat ? Math.ceil(180 / SNB) : 0;
+  const sN = new Float64Array(NSB), sR = new Float64Array(NSB), sG = new Float64Array(NSB), sB = new Float64Array(NSB);
+  // Θ × elevation, so a scattering-angle trend can be checked against the elevation
+  // it might really be. Same bin width on both axes.
+  const EB = scat ? Math.max(1, Math.ceil(Math.abs(scat.top - scat.bottom) / SNB)) : 0;
+  const s2N = new Float64Array(EB * NSB), s2R = new Float64Array(EB * NSB), s2G = new Float64Array(EB * NSB), s2B = new Float64Array(EB * NSB);
+  const D2R = Math.PI / 180;
+  const sinSun = scat ? Math.sin(scat.sunEl * D2R) : 0, cosSun = scat ? Math.cos(scat.sunEl * D2R) : 0;
   const GX = Math.max(1, gridX | 0), GY = Math.max(1, gridY | 0);
   const chans = (channels && channels.length) ? channels : ['L'];
   const px = i => coords ? coords[i * 2] : (i % w);
@@ -1559,13 +1706,26 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
     const wt = weights ? weights[i] : 1;
     const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
     const x = px(i), y = py(i);
+    const xa = useAz ? (((x - azShift) % w) + w) % w : x;
     if (y >= 0 && y < h) { rowN[y] += wt; rowR[y] += wt * r; rowG[y] += wt * g; rowB[y] += wt * b; }
-    if (x >= 0 && x < w) { colN[x] += wt; colR[x] += wt * r; colG[x] += wt * g; colB[x] += wt * b; }
-    const gx = Math.min(GX - 1, Math.floor(x / w * GX)), gy = Math.min(GY - 1, Math.floor(y / h * GY));
+    const xi = Math.min(w - 1, Math.max(0, Math.floor(xa)));
+    { colN[xi] += wt; colR[xi] += wt * r; colG[xi] += wt * g; colB[xi] += wt * b; }
+    if (scat) {
+      const el = scat.top + (scat.bottom - scat.top) * (h > 1 ? y / (h - 1) : 0);
+      const bearing = xa / w * 360;
+      const ct = Math.sin(el * D2R) * sinSun + Math.cos(el * D2R) * cosSun * Math.cos((bearing - scat.sunAz) * D2R);
+      const th = Math.acos(Math.max(-1, Math.min(1, ct))) / D2R;
+      const sb = Math.min(NSB - 1, Math.floor(th / SNB));
+      sN[sb] += wt; sR[sb] += wt * r; sG[sb] += wt * g; sB[sb] += wt * b;
+      const eb = Math.min(EB - 1, Math.max(0, Math.floor(Math.abs(el - scat.top) / SNB)));
+      const c2 = eb * NSB + sb;
+      s2N[c2] += wt; s2R[c2] += wt * r; s2G[c2] += wt * g; s2B[c2] += wt * b;
+    }
+    const gx = Math.min(GX - 1, Math.floor(xa / w * GX)), gy = Math.min(GY - 1, Math.floor(y / h * GY));
     const ci = gy * GX + gx; cN[ci] += wt; cR[ci] += wt * r; cG[ci] += wt * g; cB[ci] += wt * b;
     const rg = r - g, yb = 0.5 * (r + g) - b; cRg[ci] += wt * rg; cYb[ci] += wt * yb; cRg2[ci] += wt * rg * rg; cYb2[ci] += wt * yb * yb;
     const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b; cY[ci] += wt * Y; cY2[ci] += wt * Y * Y; cDark[ci] += wt * Math.min(r, g, b);
-    if (kmLabels) { const rank = kmRank[kmLabels[i]]; if (rank != null) { kX[rank] += wt * x; kY[rank] += wt * y; kX2[rank] += wt * x * x; kY2[rank] += wt * y * y; kN[rank] += wt; } }
+    if (kmLabels) { const rank = kmRank[kmLabels[i]]; if (rank != null) { kX[rank] += wt * xa; kY[rank] += wt * y; kX2[rank] += wt * xa * xa; kY2[rank] += wt * y * y; kN[rank] += wt; } }
   }
 
   const derive = (mr, mg, mb) => {
@@ -1579,6 +1739,26 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
     for (let k = 0; k < N.length; k++) { if (!N[k]) continue; const o = derive(R[k] / N[k], Gc[k] / N[k], B[k] / N[k]); o.index = k; o.n = N[k]; out.push(o); } return out; };
   const rows = profile(rowN, rowR, rowG, rowB);
   const cols = profile(colN, colR, colG, colB);
+  let scatter = null, scatter2d = null;
+  if (scat) {
+    scatter2d = { thetaBins: NSB, elevBins: EB, bin: SNB, top: scat.top, bottom: scat.bottom, cells: [] };
+    for (let e = 0; e < EB; e++) for (let k = 0; k < NSB; k++) {
+      const c2 = e * NSB + k; if (!s2N[c2]) continue;
+      const o = derive(s2R[c2] / s2N[c2], s2G[c2] / s2N[c2], s2B[c2] / s2N[c2]);
+      o.elev_bin = e; o.theta_bin = k; o.n = s2N[c2];
+      o.theta_lo = k * SNB; o.theta_hi = Math.min(180, (k + 1) * SNB);
+      const dir = scat.bottom < scat.top ? -1 : 1;
+      o.elev_hi = scat.top + dir * e * SNB; o.elev_lo = scat.top + dir * (e + 1) * SNB;
+      scatter2d.cells.push(o);
+    }
+    scatter = [];
+    for (let k = 0; k < NSB; k++) {
+      if (!sN[k]) continue;
+      const o = derive(sR[k] / sN[k], sG[k] / sN[k], sB[k] / sN[k]);
+      o.index = k; o.n = sN[k]; o.theta_lo = k * SNB; o.theta_hi = Math.min(180, (k + 1) * SNB);
+      scatter.push(o);
+    }
+  }
 
   const grid = []; const cellObj = new Array(NC).fill(null);
   for (let ci = 0; ci < NC; ci++) { if (!cN[ci]) continue;
@@ -1608,12 +1788,13 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
     c.centroid_x_rel = Math.round(cx / w * 1000) / 1000; c.centroid_y_rel = Math.round(cy / h * 1000) / 1000;
     c.spatial_spread_rel = Math.round(spread / diag * 1000) / 1000; });
 
-  return { rows, cols, grid, morans, morans_channels: chans, gridX: GX, gridY: GY, srcW: w, srcH: h };
+  return { rows, cols, grid, morans, morans_channels: chans, gridX: GX, gridY: GY, srcW: w, srcH: h, scatter, scatter2d, azOffset: useAz ? azOffDeg : null };
 }
 
 // Polar spatial: GX angular wedges (azimuth) × GY radial rings (elevation, centre→rim).
 // Returns the same shape as computeSpatial: rows = rings (radial/elevation), cols = wedges (angular/azimuth).
-function computeSpatialPolar(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels, weights) {
+function computeSpatialPolar(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels, weights, azOffDeg) {
+  const _azOff = (azOffDeg != null && isFinite(azOffDeg)) ? azOffDeg * Math.PI / 180 : 0;
   const GX = Math.max(1, gridX | 0), GY = Math.max(1, gridY | 0);
   const wpr = ry => Math.max(1, Math.min(GX, Math.round(GX * (ry + 0.5) / GY)));   // wedges scale with radius (no empty cells near the pole)
   const chans = (channels && channels.length) ? channels : ['L'];
@@ -1631,7 +1812,7 @@ function computeSpatialPolar(pixels, coords, w, h, kmLabels, clusters, gridX, gr
     const wt = weights ? weights[i] : 1, r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
     const x = px(i), y = py(i), dx = x - cx, dy = y - cy, rn = Math.hypot(dx, dy) / R;
     if (rn > 1) continue;
-    let ang = Math.atan2(dx, -dy); ang = ((ang % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    let ang = Math.atan2(dx, -dy) - _azOff; ang = ((ang % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
     const ring = Math.min(GY - 1, Math.floor(rn * GY)), wed = Math.min(GX - 1, Math.floor(ang / (2 * Math.PI) * GX));
     ringN[ring] += wt; ringR[ring] += wt * r; ringG[ring] += wt * g; ringB[ring] += wt * b;
     wedN[wed] += wt; wedR[wed] += wt * r; wedG[wed] += wt * g; wedB[wed] += wt * b;
@@ -1678,7 +1859,8 @@ function computeSpatialPolar(pixels, coords, w, h, kmLabels, clusters, gridX, gr
 // rgba: Uint8ClampedArray (RGBA), w/h at analysis resolution
 function analyzePixels(rgba, w, h, opts) {
   const { numClusters, transparencyBg, includePixel, includeLab = true, pixelStep = 1,
-          includeSpatial = false, gridX = 8, gridY = 8, lockRatio = false, moranChannels = ['L'], projection = null, spatialMode = 'cartesian' } = opts;
+          includeSpatial = false, gridX = 8, gridY = 8, lockRatio = false, moranChannels = ['L'], projection = null, spatialMode = 'cartesian',
+          azOffDeg = null, scat = null } = opts;
   const bgColors = { white: [255, 255, 255], black: [0, 0, 0], gray: [128, 128, 128] };
 
   const nAll = w * h;
@@ -1733,17 +1915,23 @@ function analyzePixels(rgba, w, h, opts) {
   const projWeights = computeWeights(coords, w, h, nAnalyzed, projection);
   let wtot = nAnalyzed, wcounts = null;
 
-  // K-means clusters
+  // K-means clusters — clustered in CIELAB (perceptually uniform), solid-angle-weighted when a projection is set
   let clusters = [], km = null;
   if (numClusters >= 2) {
-    km = kmeans(pixels, numClusters, 42);
+    const labPts = new Float64Array(nAnalyzed * 3);
+    for (let i = 0; i < nAnalyzed; i++) {
+      const [L0, A0, B0] = rgbToLab(pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2]);
+      labPts[i * 3] = L0; labPts[i * 3 + 1] = A0; labPts[i * 3 + 2] = B0;
+    }
+    km = kmeans(labPts, numClusters, 42, 40, projWeights);
     if (projWeights) { wcounts = new Float64Array(km.k); wtot = 0; for (let i = 0; i < nAnalyzed; i++) { wcounts[km.labels[i]] += projWeights[i]; wtot += projWeights[i]; } }
+    const share = c => wcounts ? wcounts[c] : km.counts[c];
     const order = Array.from({ length: km.k }, (_, i) => i)
-      .sort((a, b) => km.counts[b] - km.counts[a]);
+      .sort((a, b) => share(b) - share(a));
     clusters = order.map((c, rank) => {
-      const r = km.centers[c * 3], g = km.centers[c * 3 + 1], b = km.centers[c * 3 + 2];
+      const L = km.centers[c * 3], A = km.centers[c * 3 + 1], B = km.centers[c * 3 + 2];
+      const [r, g, b] = labToRgb(L, A, B);
       const [hh, ss, vv] = rgbToHsv(r, g, b);
-      const [L, A, B] = rgbToLab(r, g, b);
       const [C, H] = labToLch(L, A, B);
       const [cu, cv] = rgbToUV(r, g, b); const cPl = planckianNearest(cu, cv);
       return {
@@ -1752,9 +1940,9 @@ function analyzePixels(rgba, w, h, opts) {
         hex: rgbToHex(r, g, b),
         red: Math.round(r), green: Math.round(g), blue: Math.round(b),
         hue: hh, saturation: ss, value: vv,
-        lab_l: L, lab_a: A, lab_b: B, lch_c: C, lch_h: H,
+        lab_l: Math.round(L * 100) / 100, lab_a: Math.round(A * 100) / 100, lab_b: Math.round(B * 100) / 100, lch_c: C, lch_h: H,
         cct: rgbToCCT(r, g, b), u_prime: Math.round(cu * 1e4) / 1e4, v_prime: Math.round(cv * 1e4) / 1e4, duv: cPl.duv,
-        percentage: Math.round(((wcounts ? wcounts[c] : km.counts[c]) / wtot) * 10000) / 100,
+        percentage: Math.round((share(c) / wtot) * 10000) / 100,
         pixel_count: km.counts[c],
         weighted_count: wcounts ? wcounts[c] : km.counts[c],
       };
@@ -1773,7 +1961,12 @@ function analyzePixels(rgba, w, h, opts) {
     const kmIndexToRank = {};
     clusters.forEach(cl => { kmIndexToRank[cl._kmIndex] = cl; });
     pixelRows = [];
-    for (let i = 0; i < nAnalyzed; i += pixelStep) {
+    // Seeded Bernoulli subsampling (fixed seed → reproducible) rather than a strided every-Nth pick,
+    // which can alias with row/column patterns (e.g. JPEG block structure) in the source image.
+    const pixKeepProb = 1 / Math.max(1, pixelStep);
+    const pixRand = mulberry32(42);
+    for (let i = 0; i < nAnalyzed; i++) {
+      if (pixKeepProb < 1 && pixRand() >= pixKeepProb) continue;
       const r = pixels[i * 3], g = pixels[i * 3 + 1], b = pixels[i * 3 + 2];
       const [hh, ss, vv] = rgbToHsv(r, g, b);
       const row = {
@@ -1804,8 +1997,8 @@ function analyzePixels(rgba, w, h, opts) {
   if (includeSpatial) {
     const gyEff = lockRatio ? Math.max(1, Math.round(gridX * h / w)) : gridY;   // square cells when locked to image ratio
     spatial = (spatialMode === 'polar')
-      ? computeSpatialPolar(pixels, coords, w, h, km ? km.labels : null, clusters, gridX, gyEff, nAnalyzed, moranChannels, projWeights)
-      : computeSpatial(pixels, coords, w, h, km ? km.labels : null, clusters, gridX, gyEff, nAnalyzed, moranChannels, projWeights, !!(projection && projection.type === 'equirect'));
+      ? computeSpatialPolar(pixels, coords, w, h, km ? km.labels : null, clusters, gridX, gyEff, nAnalyzed, moranChannels, projWeights, azOffDeg)
+      : computeSpatial(pixels, coords, w, h, km ? km.labels : null, clusters, gridX, gyEff, nAnalyzed, moranChannels, projWeights, !!(projection && projection.type === 'equirect'), azOffDeg, scat);
     metrics.morans = spatial.morans;
     metrics.morans_channels = spatial.morans_channels;
   }
@@ -1898,6 +2091,7 @@ function addFiles(fileList) {
   if (skipped) log(`Skipped ${skipped} non-image file(s)`);
   renderFilePills();
   runPreflight();
+  reportGeometryJoin();
 }
 
 /* ── Preflight: inspect the queued imagery and recommend settings ────────
@@ -2245,7 +2439,23 @@ async function analyzeImages() {
         const dw = disk ? Math.round(Math.max(w, h)) : w, dh = disk ? dw : h;
         rgba = reprojectRGBA(rgba, w, h, opts.inputProjection, opts.convert, dw, dh); w = dw; h = dh;
       }
-      const result = analyzePixels(rgba, w, h, opts);
+      const _fname = src.kind === 'file' ? src.file.name : (new URL(src.url).pathname.split('/').pop() || src.url);
+      const _g = geomFor(_fname);
+      const _applyAz = (document.getElementById('geomApplyAz') || {}).checked;
+      const _wantScat = (document.getElementById('geomScat') || {}).checked;
+      const _scatBin = parseFloat((document.getElementById('geomScatBin') || {}).value) || 15;
+      // Only registered frames get a heading. An unregistered or gated frame keeps its raw
+      // axis rather than borrowing someone else's heading — the wrong number would be silent.
+      const _reg = _g && _g.yaw != null && (!_g.status || _g.status === 'accepted');
+      const _opts = Object.assign({}, opts, {
+        azOffDeg: (_applyAz && _reg) ? _g.yaw : null,
+        scat: (_wantScat && _reg && _g.solarEl != null && _g.solarAz != null && opts.projection && opts.projection.type === 'equirect')
+          ? { top: opts.projection.top, bottom: opts.projection.bottom, sunEl: _g.solarEl, sunAz: _g.solarAz, bin: _scatBin }
+          : null
+      });
+      if (_g && !_reg) log(`  · geometry row found but not registered (${_g.status || 'no yaw'}) — azimuth left unregistered`);
+      else if (_g && _applyAz) log(`  · registered: yaw ${(_g.yaw > 0 ? '+' : '') + _g.yaw.toFixed(2)}° (${_g.yawSource || 'sidecar'})`);
+      const result = analyzePixels(rgba, w, h, _opts);
       if (result.error) throw new Error(result.error);
 
       const record = {
@@ -2258,6 +2468,7 @@ async function analyzeImages() {
         pixelRows: result.pixelRows, spatial: result.spatial, quant: result.quant, thumbUrl, label: src.label,
         projLabel: opts.mode === '360' ? `${(opts.convert || opts.inputProjection || {}).type || ''} · ${opts.spatialMode}${opts.convert ? ' (converted)' : ''}` : 'standard',
         proj: opts.projection || { type: 'none' },
+        geom: _g || null, azOffset: _opts.azOffDeg,
       };
       window._results.push(record);
       cards.push({ ok: true, record });
@@ -2311,6 +2522,8 @@ async function runCompare() {
   const mapA = new Map(filesA.map(f => [_cmpStemKey(f.name), f]));
   const mapB = new Map(filesB.map(f => [_cmpStemKey(f.name), f]));
   const keys = [...mapA.keys()].filter(k => mapB.has(k));
+  const onlyA = [...mapA.keys()].filter(k => !mapB.has(k));
+  const onlyB = [...mapB.keys()].filter(k => !mapA.has(k));
   if (!keys.length) { if (status) status.textContent = `No matching filenames between Set A (${filesA.length}) and Set B (${filesB.length}) after stripping extensions.`; out.innerHTML = ''; return; }
   const rows = [];
   for (let i = 0; i < keys.length; i++) {
@@ -2326,16 +2539,23 @@ async function runCompare() {
   const des = ok2.map(r => r.dE).sort((a, b) => a - b);
   const mean = des.reduce((s, v) => s + v, 0) / (des.length || 1);
   const median = des.length ? (des.length % 2 ? des[(des.length - 1) / 2] : (des[des.length / 2 - 1] + des[des.length / 2]) / 2) : 0;
-  if (status) status.textContent = `Done — ${ok2.length} of ${keys.length} matched pair(s) compared${rows.length > ok2.length ? `, ${rows.length - ok2.length} failed` : ''}.`;
+  if (status) status.textContent = `Done — ${ok2.length} of ${keys.length} matched pair(s) compared` +
+    (rows.length > ok2.length ? `, ${rows.length - ok2.length} failed` : '') +
+    ((onlyA.length || onlyB.length) ? ` — ${onlyA.length} only in A, ${onlyB.length} only in B` : '') + '.';
   const summary = ok2.length ? `<div style="font-size:.75rem;background:#f2f8f4;border-left:3px solid #4a9d6a;color:#2c5f42;padding:.5rem .65rem;border-radius:0 4px 4px 0;margin-bottom:.5rem">
       <b>ΔE00</b> — mean ${mean.toFixed(2)} · median ${median.toFixed(2)} · min ${des[0].toFixed(2)} · max ${des[des.length - 1].toFixed(2)} · n=${ok2.length}<br>
       <span style="color:#54626f">Rule of thumb: &lt;1 imperceptible · 1&ndash;2 perceptible on close inspection · 2&ndash;10 perceptible at a glance · &gt;10 different colours.</span></div>` : '';
+  const lowOverlap = (onlyA.length || onlyB.length) && keys.length < Math.min(filesA.length, filesB.length);
+  const fmtUnmatched = (label, arr) => arr.length ? `<b>${escapeHtml(label)} only (${arr.length}):</b> ${arr.slice(0, 20).map(escapeHtml).join(', ')}${arr.length > 20 ? `, … +${arr.length - 20} more` : ''}` : '';
+  const matchNote = (onlyA.length || onlyB.length) ? `<div style="font-size:.72rem;background:#fdf6e8;border-left:3px solid #d9a441;color:#7a5a17;padding:.45rem .6rem;border-radius:0 4px 4px 0;margin-bottom:.5rem">
+      ${lowOverlap ? '<b>Low overlap</b> — fewer matches than the smaller set; check filenames line up as expected.<br>' : ''}
+      ${[fmtUnmatched('Set A', onlyA), fmtUnmatched('Set B', onlyB)].filter(Boolean).join('<br>')}</div>` : '';
   const tRows = rows.map(r => r.error
     ? `<tr><td>${escapeHtml(r.key)}</td><td colspan="4" style="color:#b23">${escapeHtml(r.error)}</td></tr>`
     : `<tr><td>${escapeHtml(r.key)}</td><td>${r.mA.mean_lightness.toFixed(1)}, ${r.mA.mean_lab_a.toFixed(1)}, ${r.mA.mean_lab_b.toFixed(1)}</td>
         <td>${r.mB.mean_lightness.toFixed(1)}, ${r.mB.mean_lab_a.toFixed(1)}, ${r.mB.mean_lab_b.toFixed(1)}</td>
         <td style="font-weight:600">${r.dE.toFixed(2)}</td></tr>`).join('');
-  out.innerHTML = summary + `<div style="max-height:280px;overflow:auto"><table class="stats-table"><thead><tr><th>file</th><th>Set A L*a*b*</th><th>Set B L*a*b*</th><th>ΔE00</th></tr></thead><tbody>${tRows}</tbody></table></div>
+  out.innerHTML = summary + matchNote + `<div style="max-height:280px;overflow:auto"><table class="stats-table"><thead><tr><th>file</th><th>Set A L*a*b*</th><th>Set B L*a*b*</th><th>ΔE00</th></tr></thead><tbody>${tRows}</tbody></table></div>
     <button class="btn btn-outline btn-sm" style="margin-top:.4rem" onclick="downloadCompareCSV()">⬇ CSV</button>`;
   window._cmpRows = rows;
 }
@@ -2394,6 +2614,47 @@ function switchTab(name) {
   document.querySelectorAll('.tabpane').forEach(p => p.style.display = (p.getAttribute('data-tab') === name) ? '' : 'none');
   document.querySelectorAll('.tabbtn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
 }
+
+// Compare tab markup — shared by renderResults() (after a run) and the
+// page-load shell below (so Compare works without running a batch first).
+function compareTabHtml() {
+  return `<div class="tabpane" data-tab="compare" style="display:none">
+  <div class="card">
+    <div class="card-title">Compare two sets (\u0394E2000)</div>
+    <p class="hint" style="margin:0 0 .6rem;max-width:720px;line-height:1.5">Loads and analyzes two sets of images under the current Configuration (resolution, transparency, projection &amp; weighting), matches files by filename stem, and reports the CIEDE2000 perceptual colour difference per matched pair &mdash; e.g. the same frames processed two ways (camera white balance vs a fixed reference), or two capture conditions. Only matched pairs are compared; unmatched files are reported below the results.</p>
+    <div class="cfg-row" style="gap:1rem;flex-wrap:wrap;margin-bottom:.5rem">
+      <label style="margin:0">Set A <input type="file" id="cmpFilesA" multiple accept="image/*"></label>
+      <label style="margin:0">Set B <input type="file" id="cmpFilesB" multiple accept="image/*"></label>
+    </div>
+    <div class="cfg-row" style="gap:.6rem">
+      <button class="btn btn-outline btn-sm" onclick="runCompare()">Analyze &amp; compare</button>
+      <button class="btn btn-outline btn-sm" onclick="checkOutliers()" title="Uses the CURRENT single-queue results above &mdash; flags images whose colour sits furthest (by \u0394E2000) from the dataset's weighted-mean colour.">Flag outliers in current results</button>
+      <span id="cmpStatus" class="sub" style="margin:0"></span>
+    </div>
+    <div id="cmpResults" style="margin-top:.6rem"></div>
+  </div>
+</div>`;
+}
+
+// Compare needs to work before any batch analysis has run (it's a standalone
+// two-set ΔE2000 tool, e.g. for the colour-fidelity check in a methods
+// write-up), so render a lightweight tab shell on load. A real analysis run
+// fully overwrites #results via renderResults(), including a fresh Compare
+// pane, so this only matters until the first run.
+function renderResultsShell() {
+  const el = document.getElementById('results');
+  if (!el || el.innerHTML.trim()) return; // don't clobber a real run
+  el.innerHTML = `
+    <div class="tabbar">
+      <button class="tabbtn active" data-tab="data" onclick="switchTab('data')">Data</button>
+      <button class="tabbtn" data-tab="viz" onclick="switchTab('viz')">Visualization</button>
+      <button class="tabbtn" data-tab="compare" onclick="switchTab('compare')">Compare</button>
+    </div>
+    <div class="tabpane" data-tab="data"><div class="card"><div class="hint" style="padding:.4rem 0">Analyze images (above) to see data here \u2014 or use the Compare tab now to run a two-set \u0394E2000 comparison without a full batch run.</div></div></div>
+    <div class="tabpane" data-tab="viz" style="display:none"><div class="card"><div class="hint" style="padding:.4rem 0">Analyze images to see visualizations here.</div></div></div>
+    ${compareTabHtml()}`;
+  switchTab('compare');
+}
 function toggleAllCards(open) { document.querySelectorAll('details.image-card-d').forEach(d => d.open = open); }
 
 // ── Data tab: dataset summary-statistics tables ─────────────────────
@@ -2411,7 +2672,8 @@ function statsMetricDefs(level) {
     ['LAB_L_mean', 'L* mean'], ['LAB_A_mean', 'a* mean'], ['LAB_B_mean', 'b* mean'], ['LCH_C_mean', 'C*ab mean'],
     ['colourfulness', 'Colourfulness'], ['redness', 'Redness'], ['cct', 'CCT'], ['rms_contrast', 'RMS contrast'],
     ['dark_channel', 'Dark-channel'], ['warm_pct', 'Warm %'], ['cool_pct', 'Cool %'], ['neutral_pct', 'Neutral %'],
-    ['hue_entropy', 'Hue entropy'], ['hue_circular_variance', 'Hue circ.var']];
+    ['hue_entropy', 'Hue entropy'], ['hue_circular_variance', 'Hue circ.var'],
+    ['u_prime', 'u′ (1976)'], ['v_prime', 'v′ (1976)'], ['duv', 'Duv']];
   if (level === 'cluster') { const a = [['hue', 'Hue°'], ['saturation', 'Sat'], ['value', 'Value'], ['percentage', 'Coverage %']];
     if (labSel) a.push(['lab_l', 'L*'], ['lab_a', 'a*'], ['lab_b', 'b*'], ['lch_c', 'C*ab']);
     a.push(['spatial_spread_rel', 'Spatial spread']); return a; }
@@ -2544,11 +2806,13 @@ function renderResults(cards, total, ok, failed, opts) {
   if (opts.includeHistogram) dl += `<button class="btn btn-outline btn-sm" onclick="downloadHistogramCSV()">⬇ Histogram CSV</button>`;
   if (opts.includePixel) dl += `<button class="btn btn-outline btn-sm" onclick="downloadPixelCSV()">⬇ Pixel CSV</button>`;
   if (opts.includeSpatial) dl += `<button class="btn btn-outline btn-sm" onclick="downloadProfilesCSV()">⬇ Row/Col profiles CSV</button><button class="btn btn-outline btn-sm" onclick="downloadGridCSV()">⬇ Grid CSV</button>`;
+  if ((window._results || []).some(r => r.spatial && r.spatial.scatter && r.spatial.scatter.length)) dl += `<button class="btn btn-outline btn-sm" onclick="downloadScatterCSV()">⬇ Scattering-angle CSV</button>`;
 
   resultsEl.innerHTML = head + `
     <div class="tabbar">
       <button class="tabbtn active" data-tab="data" onclick="switchTab('data')">Data</button>
       <button class="tabbtn" data-tab="viz" onclick="switchTab('viz')">Visualization</button>
+      <button class="tabbtn" data-tab="compare" onclick="switchTab('compare')">Compare</button>
     </div>
     <div class="tabpane" data-tab="data">
       <div class="card"><div class="card-title">Download data (CSV)</div><div class="dl-row">${dl}</div></div>
@@ -2573,6 +2837,18 @@ function renderResults(cards, total, ok, failed, opts) {
               <option value="dsazim">Mean azimuth profile</option>
               <option value="dsclust">Cluster-centroid density</option>
             </optgroup>
+            <optgroup label="Scattering angle (needs a geometry sidecar)">
+              <option value="dsscat">Θ × dataset heatmap</option>
+              <option value="dsphase">Phase curve (metric vs Θ)</option>
+              <option value="dsscat2d">Θ × elevation (confound check)</option>
+              <option value="dsstrip">Θ colour strip</option>
+            </optgroup>
+          </select>
+          <select id="rampSel" class="proj-sel" onchange="setRamp(this.value)" title="Colour ramp used for all metric heatmaps (per-image and dataset)">
+            <option value="auto" ${((window._vizRampState && window._vizRampState.name) || 'auto') === 'auto' ? 'selected' : ''}>Ramp: Auto</option>
+            <option value="viridis" ${(window._vizRampState || {}).name === 'viridis' ? 'selected' : ''}>Ramp: Viridis (sequential)</option>
+            <option value="cividis" ${(window._vizRampState || {}).name === 'cividis' ? 'selected' : ''}>Ramp: Cividis (CVD-safe)</option>
+            <option value="divergingBY" ${(window._vizRampState || {}).name === 'divergingBY' ? 'selected' : ''}>Ramp: Diverging blue↔yellow</option>
           </select>
           <div id="dsctl"></div>
           <button class="btn btn-outline btn-sm" onclick="downloadDatasetPNG()">⬇ PNG</button>
@@ -2589,7 +2865,8 @@ function renderResults(cards, total, ok, failed, opts) {
         </div>
         <div id="image-cards">${cardsHtml}</div>
       </div>
-    </div>`;
+    </div>
+    ${compareTabHtml()}`;
   resultsEl.classList.toggle('compact', compactResults);
   renderStatsControls();
   renderStatsTables();
@@ -2625,6 +2902,7 @@ function dsCanvas() { return document.getElementById('ds-canvas'); }
 function dsMetricOptions() {
   const opts = [['colourfulness', 'colourfulness'], ['redness', 'redness'], ['cct', 'CCT'], ['rms_contrast', 'RMS contrast'], ['dark_channel', 'dark-channel'],
     ['warm_pct', 'warm %'], ['cool_pct', 'cool %'], ['neutral_pct', 'neutral %'], ['hue_entropy', 'hue entropy'], ['hue_circular_variance', 'hue circular variance'],
+    ['u_prime', 'u′ (1976)'], ['v_prime', 'v′ (1976)'], ['duv', 'Duv'],
     ['HSV_S_mean', 'HSV S mean'], ['HSV_V_mean', 'HSV V mean'], ['LAB_L_mean', 'LAB L* mean'], ['LCH_C_mean', 'LCH C*ab mean']];
   const sm = window._results && window._results[0] && window._results[0].metrics.morans;
   if (sm) Object.keys(sm).forEach(ch => opts.push(['morans_i_' + ch, "Moran's I " + ch]));
@@ -2650,6 +2928,16 @@ function showDatasetViz(kind) {
       [['image', 'image means'], ['cluster', 'all clusters']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaLevel || 'image') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') +
       '</select> <span style="font-size:0.72rem;margin-left:.4rem">colour by:</span> <select style="font-size:0.72rem" onchange="setDsChromaColour(this.value)">' +
       [['date', 'capture date'], ['none', 'single colour']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaColour || 'date') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+    else if (['dsscat', 'dsphase', 'dsscat2d', 'dsstrip'].includes(kind)) {
+      const chSel = kind === 'dsstrip' ? '' :
+        '<span style="font-size:0.72rem">metric:</span> <select style="font-size:0.72rem" onchange="setScatCh(this.value)">' +
+        SCAT_CH.map(o => `<option value="${o[0]}" ${_scatCh() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select> ';
+      const grpSel = kind === 'dsscat2d' ? '' :
+        '<span style="font-size:0.72rem;margin-left:.4rem">group by:</span> <select style="font-size:0.72rem" onchange="setScatGroup(this.value)">' +
+        [['date', 'capture date'], ['folder', 'sidecar dataset'], ['none', 'all together']]
+          .map(o => `<option value="${o[0]}" ${_scatGroupMode() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+      ctl.innerHTML = chSel + grpSel;
+    }
     else ctl.innerHTML = '';
   }
   drawDatasetViz();
@@ -2673,6 +2961,10 @@ function aggregatePalette() {
 function renderDatasetViz(ctx, W, H) {
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   const st = window._dsState;
+  if (st.kind === 'dsscat') { drawScatHeat(ctx, W, H); return; }
+  if (st.kind === 'dsphase') { drawScatPhase(ctx, W, H); return; }
+  if (st.kind === 'dsscat2d') { drawScat2D(ctx, W, H); return; }
+  if (st.kind === 'dsstrip') { drawScatStrip(ctx, W, H); return; }
   if (['dsgrid', 'dsvar', 'dselev', 'dsazim', 'dsclust'].includes(st.kind)) { renderDatasetSpatial(ctx, W, H); return; }
   if (st.kind === 'dschroma') { drawDatasetChromaticity(ctx, W, H); return; }
   if (st.kind === 'palette') {
@@ -2984,6 +3276,35 @@ function _plotDeg(proj, valign, band) {
   const a = _elevAt(proj, lo), b = _elevAt(proj, hi);
   return (a == null) ? [null, null] : [a, b];
 }
+/* True-bearing axis. Registration (SunSync 360) already rolled the sampling lattice
+   so column 0 is north, which is the only reason a compass label is defensible here.
+   Without it the axis is still drawn, but in frame-relative degrees and labelled as
+   not a compass — an unregistered frame's x origin is wherever the camera happened
+   to be pointing, and differs frame to frame. */
+function _dsRegistered() {
+  const res = (window._results || []).filter(r => r.spatial);
+  if (!res.length) return false;
+  return res.every(r => r.azOffset != null);
+}
+function drawAzimAxis(ctx, xLeft, yTop, plotW, plotH, registered, azSpan, note) {
+  const span = azSpan || 360;
+  const CARD = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW', 360: 'N' };
+  const step = span <= 90 ? 15 : span <= 200 ? 30 : 45;
+  ctx.save();
+  ctx.strokeStyle = '#c9d6de'; ctx.lineWidth = 1; ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
+  ctx.textAlign = 'center'; ctx.beginPath();
+  for (let d = 0; d <= span + 1e-6; d += step) {
+    const x = Math.round(xLeft + (d / span) * plotW) + 0.5;
+    const major = registered && (d % 45 === 0);
+    ctx.moveTo(x, yTop + plotH); ctx.lineTo(x, yTop + plotH + (major ? 5 : 3));
+    const lbl = registered ? (CARD[d % 360] != null && d % 45 === 0 ? CARD[d % 360] : Math.round(d) + '°') : Math.round(d) + '°';
+    ctx.fillText(lbl, x, yTop + plotH + 14);
+  }
+  ctx.stroke();
+  ctx.fillStyle = registered ? '#6b7a8d' : '#b06a2c';
+  ctx.fillText(note || (registered ? 'azimuth — true bearing' : 'azimuth — frame-relative, NOT a compass'), xLeft + plotW / 2, yTop + plotH + 25);
+  ctx.restore(); ctx.textAlign = 'left';
+}
 function _tickStep(span) { const s = Math.abs(span); return s <= 12 ? 2 : s <= 30 ? 5 : s <= 70 ? 10 : s <= 200 ? 30 : 45; }
 /* A real axis in the left margin: ticks at round degrees, rotated title.
    Falls back to a 0–1 normalised scale when degrees are not meaningful. */
@@ -3044,16 +3365,18 @@ function renderDatasetSpatial(ctx, W, H) {
     }
     let vmin = Infinity, vmax = -Infinity; for (let i = 0; i < field.length; i++) { const v = field[i]; if (!isNaN(v)) { if (v < vmin) vmin = v; if (v > vmax) vmax = v; } }
     if (!isFinite(vmin)) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('No data', 10, 40); return; }
+    setRampCtx(ch, vmin, vmax, st.gridMeasure || 'mean');
+    if (rampIsDiverging()) { const m = Math.max(Math.abs(vmin), Math.abs(vmax)); vmin = -m; vmax = m; }
     ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText(`${title} — ${d.nImg} images`, 8, 13);
     _vizSub(ctx, `${dsChanLabel(ch)} · ${kind === 'dsclust' ? 'centroid density' : (st.gridMeasure || 'mean')} · V:${d.valign} H:${d.halign}${d.halign !== 'none' ? ` (${d.aligned}/${d.total})` : ''} · ${polar ? 'polar' : 'rectangular'}`);
     const colFn = (wx, ry) => { const v = field[ry * DXg + wx]; return isNaN(v) ? null : vizRamp((v - vmin) / ((vmax - vmin) || 1)); };
     if (polar) { const pe = _polarEnds((window._results[0] || {}).proj); drawPolarField(ctx, W - 44, H, DXg, DYg, colFn, pe[0], pe[1]); drawRampLegend(ctx, W - 40, 24, H - 48, vmin, vmax); }
     else {
-      const mL = 46, mT = 34, mR = 60, mB = 24, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / DXg, chh = plotH / DYg;
+      const mL = 46, mT = 34, mR = 60, mB = 40, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / DXg, chh = plotH / DYg;
       for (let y = 0; y < DYg; y++) for (let x = 0; x < DXg; x++) { const c = colFn(x, y); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mL + x * cw, mT + y * chh, Math.ceil(cw), Math.ceil(chh)); }
       ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
-      ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('← azimuth →', mL + plotW / 2, mT + plotH + 15);
+      drawAzimAxis(ctx, mL, mT, plotW, plotH, _dsRegistered(), 360,
+        d.halign === 'none' ? null : 'azimuth — aligned to ' + d.halign);
       const pd = _plotDeg((window._results[0] || {}).proj, d.valign, _dsBand());
       drawElevAxis(ctx, mL, mT, plotH, pd[0], pd[1], d.valign === 'mask' ? 'normalised extent' : 'elevation');
       ctx.textAlign = 'left'; drawRampLegend(ctx, mL + plotW + 12, mT, plotH, vmin, vmax);
@@ -3093,13 +3416,267 @@ function renderDatasetSpatial(ctx, W, H) {
       ctx.strokeStyle = '#dde8ed'; ctx.beginPath(); ctx.arc(cx, cy, Rmax, 0, 2 * Math.PI); ctx.stroke(); ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('azimuth wheel', cx, cy - Rmax - 4); ctx.textAlign = 'left'; }
     return;
   }
-  const mT = 34, mB = 20, mLx = isElev ? 54 : 8, mRx = 8, plotW = W - mLx - mRx, plotH = H - mT - mB;
+  const mT = 34, mB = isElev ? 20 : 40, mLx = isElev ? 54 : 8, mRx = 8, plotW = W - mLx - mRx, plotH = H - mT - mB;
   if (isElev) { const bh = plotH / NN; for (let k = 0; k < NN; k++) { const c = colAt(k); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mLx, mT + k * bh, plotW, Math.ceil(bh)); }
     ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH);
     const pd = _plotDeg((window._results[0] || {}).proj, d.valign, _dsBand());
     drawElevAxis(ctx, mLx, mT, plotH, pd[0], pd[1], d.valign === 'mask' ? 'normalised extent' : 'elevation'); }
   else { const bw = plotW / NN; for (let k = 0; k < NN; k++) { const c = colAt(k); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mLx + k * bw, mT, Math.ceil(bw), plotH); }
-    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH); ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(d.halign === 'none' ? '← azimuth →' : '← azimuth (aligned to ' + d.halign + ') →', mLx + plotW / 2, mT + plotH + 14); ctx.textAlign = 'left'; }
+    ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mLx, mT, plotW, plotH);
+    drawAzimAxis(ctx, mLx, mT, plotW, plotH, _dsRegistered(), 360,
+      d.halign === 'none' ? null : 'azimuth — aligned to ' + d.halign); }
+}
+
+
+/* ══════════════ SCATTERING-ANGLE VIEWS ══════════════
+   Θ is the angular distance of a patch of sky from the sun. Unlike a position in the
+   frame it means the same thing in every capture, which is what lets two datasets be
+   compared at all. Everything below reads r.spatial.scatter / r.spatial.scatter2d,
+   produced when a geometry sidecar is loaded and "scattering-angle bins" is ticked. */
+const SCAT_CH = [['b', 'b* (blue–yellow)'], ['L', 'L* (lightness)'], ['a', 'a* (green–red)'],
+                 ['C', 'C* (chroma)'], ['S', 'saturation'], ['V', 'value'],
+                 ['R', 'R'], ['G', 'G'], ['B', 'B']];
+const SCAT_SERIES_COLS = ['#2c5f7a', '#c0392b', '#1a9080', '#8e5aa8', '#b8761d', '#4a7a2c', '#a8386b', '#3a6ea5'];
+function _scatCh() { return (window._dsState && window._dsState.scatCh) || 'b'; }
+function setScatCh(v) { window._dsState.scatCh = v; drawDatasetViz(); }
+function _scatGroupMode() { return (window._dsState && window._dsState.scatGroup) || 'date'; }
+function setScatGroup(v) { window._dsState.scatGroup = v; drawDatasetViz(); }
+
+/* Group the loaded images the same way the Data tab does, plus a grouping by the
+   sidecar's own dataset/folder column when one was supplied. */
+function scatGroupsOf(res) {
+  const mode = _scatGroupMode(), g = {};
+  for (const r of res) {
+    let k = 'All images';
+    if (mode === 'date') k = (r.exif && r.exif.datetime) ? String(r.exif.datetime).slice(0, 10).replace(/:/g, '-') : 'no date';
+    else if (mode === 'folder') k = (r.geom && r.geom.dataset) || 'no dataset';
+    (g[k] = g[k] || []).push(r);
+  }
+  return g;
+}
+/* Merge each image's Θ bins into one set per group. Colour is pooled as a
+   weight-weighted mean RGB and the metrics re-derived from it, exactly as the
+   per-image bins were derived — so the aggregate is built the same way as its parts. */
+function dsScatterGroups() {
+  const res = (window._results || []).filter(r => r.spatial && r.spatial.scatter && r.spatial.scatter.length);
+  if (!res.length) return null;
+  const groups = scatGroupsOf(res);
+  const out = [];
+  let binW = 15, thetaMax = 0;
+  for (const name of Object.keys(groups).sort()) {
+    const acc = {};
+    for (const r of groups[name]) for (const o of r.spatial.scatter) {
+      const k = o.theta_lo; binW = o.theta_hi - o.theta_lo;
+      const a = acc[k] || (acc[k] = { lo: o.theta_lo, hi: o.theta_hi, n: 0, r: 0, g: 0, b: 0 });
+      a.n += o.n; a.r += o.mean_r * o.n; a.g += o.mean_g * o.n; a.b += o.mean_b * o.n;
+      if (o.theta_hi > thetaMax) thetaMax = o.theta_hi;
+    }
+    const bins = Object.keys(acc).map(Number).sort((x, y) => x - y).map(k => {
+      const a = acc[k], mr = a.r / a.n, mg = a.g / a.n, mb = a.b / a.n;
+      const [hh, ss, vv] = rgbToHsv(mr, mg, mb), [L, A, Bb] = rgbToLab(mr, mg, mb), [C] = labToLch(L, A, Bb);
+      return { lo: a.lo, hi: a.hi, n: a.n, mean_r: mr, mean_g: mg, mean_b: mb,
+               hue: hh, saturation: ss, value: vv, lightness: L, lab_a: A, lab_b: Bb, chroma: C };
+    });
+    out.push({ name, bins, nImg: groups[name].length });
+  }
+  return { groups: out, binW, thetaMax: thetaMax || 180 };
+}
+function scatVal(o, ch) {
+  return ({ R: o.mean_r, G: o.mean_g, B: o.mean_b, S: o.saturation, V: o.value,
+            L: o.lightness, a: o.lab_a, b: o.lab_b, C: o.chroma })[ch];
+}
+/* What the reader needs to know before trusting the figure: how much of the Θ range
+   was actually sampled, and how uneven the sampling was. Solar elevation, the
+   elevation cut and the sky mask all limit coverage — a curve that stops at 120°
+   is not a curve that fell to zero. */
+function scatCoverage(D) {
+  if (!D || !D.groups.length) return '';
+  const all = D.groups.flatMap(g => g.bins);
+  const lo = Math.min(...all.map(b => b.lo)), hi = Math.max(...all.map(b => b.hi));
+  const per = {};
+  D.groups.forEach(g => g.bins.forEach(b => { per[b.lo] = (per[b.lo] || 0) + b.n; }));
+  const ws = Object.values(per), wMax = Math.max(...ws), wMin = Math.min(...ws);
+  let t = `Θ sampled ${lo}–${hi}°`;
+  if (lo > 5 || hi < 175) t += ' (partial — solar elevation and the sky mask limit what is visible)';
+  t += ` · thinnest bin holds ${Math.round(100 * wMin / (wMax || 1))}% of the sky of the widest`;
+  if (wMin / (wMax || 1) < 0.15) t += ' — treat the end bins as indicative only';
+  return t;
+}
+function scatChLabel(ch) { const e = SCAT_CH.find(x => x[0] === ch); return e ? e[1] : ch; }
+function _noScat(ctx, W, H) {
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif';
+  ctx.fillText('No scattering-angle data.', 12, 30);
+  ctx.font = '11px sans-serif';
+  ctx.fillText('Load a SunSync 360 geometry sidecar, tick “scattering-angle bins” in the 360° panel, and re-run.', 12, 50);
+}
+/* A Θ axis with a marker at 90°, because that is where the annuli are widest and
+   where forward and back scattering divide. */
+function drawThetaAxis(ctx, xLeft, yTop, plotW, plotH, thetaMax) {
+  ctx.save(); ctx.strokeStyle = '#c9d6de'; ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
+  ctx.textAlign = 'center'; ctx.beginPath();
+  for (let d = 0; d <= thetaMax + 1e-6; d += 30) {
+    const x = Math.round(xLeft + (d / thetaMax) * plotW) + 0.5;
+    ctx.moveTo(x, yTop + plotH); ctx.lineTo(x, yTop + plotH + 4);
+    ctx.fillText(d + '°', x, yTop + plotH + 14);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 10px sans-serif';
+  ctx.fillText('scattering angle Θ — 0° = toward the sun, 180° = antisolar', xLeft + plotW / 2, yTop + plotH + 27);
+  ctx.restore(); ctx.textAlign = 'left';
+}
+/* Bin weight varies enormously with Θ — an annulus at 90° covers far more sky than one
+   at 10°. Drawn as a footer strip so a thin, noisy bin is never mistaken for a solid one. */
+function drawWeightStrip(ctx, xLeft, y, plotW, bins, thetaMax, binW) {
+  const wMax = Math.max(...bins.map(b => b.n)) || 1;
+  ctx.save();
+  bins.forEach(b => {
+    const x0 = xLeft + (b.lo / thetaMax) * plotW, x1 = xLeft + (b.hi / thetaMax) * plotW;
+    const h = 10 * (b.n / wMax);
+    ctx.fillStyle = 'rgba(44,95,122,.45)';
+    ctx.fillRect(x0, y + 10 - h, Math.max(1, x1 - x0 - 1), h);
+  });
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '8px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('sky sampled per bin', xLeft, y + 19);
+  ctx.restore();
+}
+
+/* ── 1. Θ × dataset heatmap — the cross-dataset comparison figure ── */
+function drawScatHeat(ctx, W, H) {
+  const D = dsScatterGroups(); if (!D) return _noScat(ctx, W, H);
+  const ch = _scatCh(), gs = D.groups;
+  let vmin = Infinity, vmax = -Infinity;
+  gs.forEach(g => g.bins.forEach(b => { const v = scatVal(b, ch); if (v < vmin) vmin = v; if (v > vmax) vmax = v; }));
+  if (!isFinite(vmin)) return _noScat(ctx, W, H);
+  setRampCtx(ch, vmin, vmax, 'mean');
+  if (rampIsDiverging()) { const m = Math.max(Math.abs(vmin), Math.abs(vmax)); vmin = -m; vmax = m; }
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText('Scattering angle × dataset — ' + scatChLabel(ch), 8, 14);
+  _vizSub(ctx, gs.length + ' group(s) · ' + gs.reduce((a, g) => a + g.nImg, 0) + ' images · ' + scatCoverage(D) + ' · ramp: ' + rampAutoWhy());
+  const labW = Math.min(150, Math.max(70, ...gs.map(g => ctx.measureText(g.name).width + 12)));
+  const mL = 8 + labW, mT = 40, mR = 74, mB = 52;
+  const plotW = W - mL - mR, plotH = H - mT - mB, rh = plotH / gs.length;
+  gs.forEach((g, i) => {
+    g.bins.forEach(b => {
+      const x0 = mL + (b.lo / D.thetaMax) * plotW, x1 = mL + (b.hi / D.thetaMax) * plotW;
+      ctx.fillStyle = vizRamp((scatVal(b, ch) - vmin) / ((vmax - vmin) || 1));
+      ctx.fillRect(x0, mT + i * rh, Math.max(1, x1 - x0), Math.ceil(rh));
+    });
+    ctx.fillStyle = '#1a2332'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(g.name, mL - 6, mT + i * rh + rh / 2 + 3);
+    ctx.textAlign = 'left';
+  });
+  ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
+  drawThetaAxis(ctx, mL, mT, plotW, plotH, D.thetaMax);
+  drawRampLegend(ctx, mL + plotW + 12, mT, plotH, vmin, vmax);
+}
+
+/* ── 2. Phase curve — metric against Θ, one line per dataset ── */
+function drawScatPhase(ctx, W, H) {
+  const D = dsScatterGroups(); if (!D) return _noScat(ctx, W, H);
+  const ch = _scatCh(), gs = D.groups;
+  let y0 = Infinity, y1 = -Infinity;
+  gs.forEach(g => g.bins.forEach(b => { const v = scatVal(b, ch); if (v < y0) y0 = v; if (v > y1) y1 = v; }));
+  if (!isFinite(y0)) return _noScat(ctx, W, H);
+  if (y1 - y0 < 1e-6) { y0 -= 1; y1 += 1; }
+  const pad = (y1 - y0) * 0.12; y0 -= pad; y1 += pad;
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText('Phase curve — ' + scatChLabel(ch) + ' against scattering angle', 8, 14);
+  _vizSub(ctx, 'marker area ∝ sky sampled in that bin · shape is the diagnostic, not the level · ' + scatCoverage(D));
+  const mL = 54, mT = 40, mR = 150, mB = 52;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const X = v => mL + (v / D.thetaMax) * plotW, Y = v => mT + (1 - (v - y0) / ((y1 - y0) || 1)) * plotH;
+  ctx.strokeStyle = '#eef3f6'; ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 5; i++) {
+    const v = y0 + (y1 - y0) * i / 5, y = Math.round(Y(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL + plotW, y); ctx.stroke();
+    ctx.fillText((Math.round(v * 100) / 100) + '', mL - 6, y + 3);
+  }
+  ctx.textAlign = 'left';
+  if (y0 < 0 && y1 > 0) { const yz = Math.round(Y(0)) + 0.5;
+    ctx.strokeStyle = '#c9d6de'; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(mL, yz); ctx.lineTo(mL + plotW, yz); ctx.stroke(); ctx.setLineDash([]); }
+  const wMax = Math.max(...gs.flatMap(g => g.bins.map(b => b.n))) || 1;
+  gs.forEach((g, i) => {
+    const col = SCAT_SERIES_COLS[i % SCAT_SERIES_COLS.length];
+    ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.beginPath();
+    g.bins.forEach((b, k) => { const x = X((b.lo + b.hi) / 2), y = Y(scatVal(b, ch)); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+    ctx.fillStyle = col;
+    g.bins.forEach(b => { const x = X((b.lo + b.hi) / 2), y = Y(scatVal(b, ch));
+      ctx.beginPath(); ctx.arc(x, y, 1.5 + 4 * Math.sqrt(b.n / wMax), 0, 2 * Math.PI); ctx.fill(); });
+    ctx.font = '10px sans-serif'; ctx.fillRect(mL + plotW + 14, mT + 4 + i * 15, 9, 9);
+    ctx.fillStyle = '#1a2332'; ctx.fillText(g.name + ' (' + g.nImg + ')', mL + plotW + 27, mT + 12 + i * 15);
+  });
+  ctx.strokeStyle = '#dde8ed'; ctx.lineWidth = 1; ctx.strokeRect(mL, mT, plotW, plotH);
+  drawThetaAxis(ctx, mL, mT, plotW, plotH, D.thetaMax);
+  ctx.save(); ctx.translate(16, mT + plotH / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif';
+  ctx.fillText(scatChLabel(ch), 0, 0); ctx.restore(); ctx.textAlign = 'left';
+}
+
+/* ── 3. Θ × elevation — the confound check ── */
+function drawScat2D(ctx, W, H) {
+  const res = (window._results || []).filter(r => r.spatial && r.spatial.scatter2d && r.spatial.scatter2d.cells.length);
+  if (!res.length) return _noScat(ctx, W, H);
+  const ch = _scatCh(), meta = res[0].spatial.scatter2d;
+  const NT = meta.thetaBins, NE = meta.elevBins;
+  const accN = new Float64Array(NT * NE), accR = new Float64Array(NT * NE), accG = new Float64Array(NT * NE), accB = new Float64Array(NT * NE);
+  for (const r of res) for (const o of r.spatial.scatter2d.cells) {
+    const i = o.elev_bin * NT + o.theta_bin; if (i < 0 || i >= accN.length) continue;
+    accN[i] += o.n; accR[i] += o.mean_r * o.n; accG[i] += o.mean_g * o.n; accB[i] += o.mean_b * o.n;
+  }
+  const vals = new Float64Array(NT * NE).fill(NaN);
+  let vmin = Infinity, vmax = -Infinity;
+  for (let i = 0; i < accN.length; i++) {
+    if (!accN[i]) continue;
+    const mr = accR[i] / accN[i], mg = accG[i] / accN[i], mb = accB[i] / accN[i];
+    const [hh, ss, vv] = rgbToHsv(mr, mg, mb), [L, A, Bb] = rgbToLab(mr, mg, mb), [C] = labToLch(L, A, Bb);
+    const v = scatVal({ mean_r: mr, mean_g: mg, mean_b: mb, hue: hh, saturation: ss, value: vv, lightness: L, lab_a: A, lab_b: Bb, chroma: C }, ch);
+    vals[i] = v; if (v < vmin) vmin = v; if (v > vmax) vmax = v;
+  }
+  if (!isFinite(vmin)) return _noScat(ctx, W, H);
+  setRampCtx(ch, vmin, vmax, 'mean');
+  if (rampIsDiverging()) { const m = Math.max(Math.abs(vmin), Math.abs(vmax)); vmin = -m; vmax = m; }
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText('Scattering angle × elevation — ' + scatChLabel(ch), 8, 14);
+  _vizSub(ctx, res.length + ' images pooled · a Θ trend that holds across every elevation row is a Θ effect; one confined to low rows is a horizon effect');
+  const mL = 54, mT = 40, mR = 74, mB = 52;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const cw = plotW / NT, chh = plotH / NE;
+  for (let e = 0; e < NE; e++) for (let k = 0; k < NT; k++) {
+    const v = vals[e * NT + k]; if (isNaN(v)) continue;
+    ctx.fillStyle = vizRamp((v - vmin) / ((vmax - vmin) || 1));
+    ctx.fillRect(mL + k * cw, mT + e * chh, Math.ceil(cw), Math.ceil(chh));
+  }
+  ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
+  drawThetaAxis(ctx, mL, mT, plotW, plotH, NT * meta.bin);
+  drawElevAxis(ctx, mL, mT, plotH, meta.top, meta.top + (meta.bottom < meta.top ? -1 : 1) * NE * meta.bin, 'elevation');
+  drawRampLegend(ctx, mL + plotW + 12, mT, plotH, vmin, vmax);
+}
+
+/* ── 4. Θ-annulus colour strip — the sky's own colour, no metric, no ramp ── */
+function drawScatStrip(ctx, W, H) {
+  const D = dsScatterGroups(); if (!D) return _noScat(ctx, W, H);
+  const gs = D.groups;
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText('Mean sky colour by angular distance from the sun', 8, 14);
+  _vizSub(ctx, 'measured colour, not a ramp · ' + gs.length + ' group(s) · ' + scatCoverage(D));
+  ctx.font = '10px sans-serif';
+  const labW = Math.min(150, Math.max(70, ...gs.map(g => ctx.measureText(g.name).width + 12)));
+  const mL = 8 + labW, mT = 40, mR = 12, mB = 56;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const rh = plotH / gs.length;
+  gs.forEach((g, i) => {
+    g.bins.forEach(b => {
+      const x0 = mL + (b.lo / D.thetaMax) * plotW, x1 = mL + (b.hi / D.thetaMax) * plotW;
+      ctx.fillStyle = `rgb(${Math.round(b.mean_r)},${Math.round(b.mean_g)},${Math.round(b.mean_b)})`;
+      ctx.fillRect(x0, mT + i * rh, Math.max(1, x1 - x0), Math.ceil(rh) - 2);
+    });
+    ctx.fillStyle = '#1a2332'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(g.name, mL - 6, mT + i * rh + rh / 2 + 3); ctx.textAlign = 'left';
+  });
+  ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
+  drawThetaAxis(ctx, mL, mT, plotW, plotH, D.thetaMax);
+  drawWeightStrip(ctx, mL, mT + plotH + 30, plotW, gs[0].bins, D.thetaMax, D.binW);
 }
 
 function histControlsHtml(id) {
@@ -3308,10 +3885,87 @@ function drawViz(id) {
   const r = recById(id), cv = vizCanvas(id); if (!r || !cv) return;
   renderViz(cv.getContext('2d'), cv.width, cv.height, r, window._vizState[id] || { kind: 'palette' });
 }
-// Sequential viridis-style ramp for metric heatmaps
+// Colour ramps for metric heatmaps — sequential (viridis, cividis) and diverging (blue↔yellow, for b*-style axes)
+const RAMP_STOPS = {
+  viridis:    [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]],
+  cividis:    [[0, 32, 76], [85, 91, 108], [150, 150, 141], [221, 179, 92], [255, 234, 70]],
+  divergingBY: [[33, 90, 170], [146, 197, 222], [247, 247, 247], [253, 219, 143], [220, 150, 10]],
+};
+const RAMP_DIVERGING = new Set(['divergingBY']);
+/* Which quantities have a meaningful zero. A diverging ramp says "this value sits
+   above or below a natural midpoint"; on a magnitude like L* or chroma there is no
+   such midpoint and the claim is false. Signedness depends on the measure as well as
+   the channel: an SD is never signed, a local Moran's I always is. */
+const RAMP_SIGNED_CH = new Set(['a', 'b', 'red']);
+function metricIsSigned(ch, measure) {
+  if (measure === 'sd') return false;
+  if (measure === 'lisa') return true;
+  return RAMP_SIGNED_CH.has(ch);
+}
+/* Set by every heatmap just after it computes its raw range, so 'auto' can see both
+   what is being drawn and whether the data actually straddles zero. */
+function setRampCtx(ch, vmin, vmax, measure) {
+  window._rampCtx = { ch, vmin, vmax, measure };
+  syncRampUI();
+}
+function rampStraddlesZero(c) {
+  if (!c || !isFinite(c.vmin) || !isFinite(c.vmax)) return false;
+  if (!(c.vmin < 0 && c.vmax > 0)) return false;
+  // both sides must carry real data: a range of −0.25…11 crosses zero only nominally,
+  // and a diverging ramp on it would put the midpoint at 2% of the scale.
+  const span = c.vmax - c.vmin;
+  return Math.min(-c.vmin, c.vmax) >= 0.10 * span;
+}
+function rampAutoName() {
+  const c = window._rampCtx;
+  if (!c) return 'viridis';
+  return (metricIsSigned(c.ch, c.measure) && rampStraddlesZero(c)) ? 'divergingBY' : 'viridis';
+}
+function rampAutoWhy() {
+  const c = window._rampCtx;
+  if (!c) return '';
+  const signed = metricIsSigned(c.ch, c.measure);
+  const straddles = rampStraddlesZero(c);
+  if (signed && straddles) return 'diverging — this metric has a meaningful zero and the data crosses it';
+  if (signed && !straddles) return 'sequential — this metric has a zero, but the data barely crosses it, so a diverging ramp would put its midpoint at the edge of the scale';
+  return 'sequential — this is a magnitude with no meaningful midpoint';
+}
+function rampName() {
+  const n = (window._vizRampState && window._vizRampState.name) || 'auto';
+  return n === 'auto' ? rampAutoName() : n;
+}
+function rampIsDiverging() { return RAMP_DIVERGING.has(rampName()); }
+/* Grey out ramps that would misrepresent the current data, and say why. */
+function syncRampUI() {
+  const sel = document.getElementById('rampSel'); if (!sel) return;
+  const c = window._rampCtx || {};
+  const divOk = metricIsSigned(c.ch, c.measure) && rampStraddlesZero(c);
+  // views that draw measured colour or categorical series never consult the ramp
+  const kind = (window._dsState || {}).kind;
+  const rampUnused = ['dsphase', 'dsstrip', 'palette', 'dschroma', 'hist'].includes(kind);
+  sel.disabled = rampUnused;
+  sel.style.opacity = rampUnused ? 0.45 : 1;
+  if (rampUnused) { sel.title = 'This view draws measured colour or per-dataset series — no ramp is used.'; return; }
+  Array.from(sel.options).forEach(o => {
+    if (RAMP_DIVERGING.has(o.value)) {
+      o.disabled = !divOk;
+      o.textContent = o.textContent.replace(/ — .*$/, '') + (divOk ? '' : ' — n/a for this metric');
+    }
+  });
+  const auto = sel.querySelector('option[value="auto"]');
+  if (auto) auto.textContent = 'Ramp: Auto (' + (rampAutoName() === 'divergingBY' ? 'diverging' : 'sequential') + ')';
+  if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) { sel.value = 'auto'; if (window._vizRampState) window._vizRampState.name = 'auto'; }
+  sel.title = 'Colour ramp for metric heatmaps. Auto: ' + rampAutoWhy();
+}
+function setRamp(name) {
+  window._vizRampState = window._vizRampState || {};
+  window._vizRampState.name = name;
+  drawDatasetViz();
+  redrawAllViz();
+}
 function vizRamp(t) {
   t = Math.max(0, Math.min(1, t));
-  const s = [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]];
+  const s = RAMP_STOPS[rampName()] || RAMP_STOPS.viridis;
   const x = t * (s.length - 1), i = Math.floor(x), f = x - i, a = s[i], b = s[Math.min(s.length - 1, i + 1)];
   return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)},${Math.round(a[1] + (b[1] - a[1]) * f)},${Math.round(a[2] + (b[2] - a[2]) * f)})`;
 }
@@ -3351,12 +4005,14 @@ function drawVizGrid(ctx, W, H, r, heat, heatCh) {
   const mI = (heat && r.spatial.morans && r.spatial.morans[ch] != null) ? r.spatial.morans[ch] : null;
   const IB = _imgBand(r), full = _dsExtent() === 'full';
   const rowA = full ? 0 : IB.a, rowB = full ? GY - 1 : IB.b, nRow = rowB - rowA + 1;
-  const mL = 46, mT = 34, mB = 16, mR = heat ? 62 : 8, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / GX, chh = plotH / nRow;
+  const mL = 46, mT = 34, mB = 34, mR = heat ? 62 : 8, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / GX, chh = plotH / nRow;
   ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
   ctx.fillText(heat ? `Grid heatmap — ${chName}${mI != null ? `  (Moran's I ${mI})` : ''}` : 'Grid — mean colour per cell', 8, 14);
   _vizSub(ctx, `${r.projLabel || ''} · x = azimuth, y = elevation${heat ? ' · ' + chName : ' · mean colour'}`);
   let vmin = Infinity, vmax = -Infinity;
   if (heat) r.spatial.grid.forEach(o => { const v = cellChanVal(o, ch); if (v < vmin) vmin = v; if (v > vmax) vmax = v; });
+  if (heat) setRampCtx(ch, vmin, vmax, 'mean');
+  if (heat && rampIsDiverging() && isFinite(vmin) && isFinite(vmax)) { const m = Math.max(Math.abs(vmin), Math.abs(vmax)); vmin = -m; vmax = m; }
   r.spatial.grid.forEach(o => { if (o.cell_y < rowA || o.cell_y > rowB) return;
     ctx.fillStyle = heat ? vizRamp((cellChanVal(o, ch) - vmin) / ((vmax - vmin) || 1)) : `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`;
     ctx.fillRect(mL + o.cell_x * cw, mT + (o.cell_y - rowA) * chh, Math.ceil(cw), Math.ceil(chh)); });
@@ -3365,8 +4021,8 @@ function drawVizGrid(ctx, W, H, r, heat, heatCh) {
   for (let j = 0; j <= nRow; j++) { ctx.moveTo(mL, mT + j * chh); ctx.lineTo(mL + plotW, mT + j * chh); }
   ctx.stroke();
   ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
-  ctx.textAlign = 'center'; const sx = Math.max(1, Math.round(GX / 8)); for (let i = 0; i <= GX; i += sx) ctx.fillText(i, mL + i * cw, mT + plotH + 12);
   ctx.textAlign = 'left';
+  drawAzimAxis(ctx, mL, mT, plotW, plotH, r.azOffset != null, (r.proj && r.proj.azSpan) || 360);
   drawElevAxis(ctx, mL, mT, plotH, _elevAt(r.proj, rowA / GY), _elevAt(r.proj, (rowB + 1) / GY), 'elevation');
   if (heat && vmax > vmin) { const lx = W - mR + 16, ly = mT, lh = plotH, lw = 12;
     for (let k = 0; k < lh; k++) { ctx.fillStyle = vizRamp(1 - k / lh); ctx.fillRect(lx, ly + k, lw, 1); }
@@ -3383,6 +4039,8 @@ function drawVizGridPolar(ctx, W, H, r, heat, heatCh) {
   _vizSub(ctx, `${r.projLabel || ''} · ring = angle from centre, wedge = azimuth${heat ? ' · ' + chName : ' · mean colour'}`);
   const cell = {}; let vmin = Infinity, vmax = -Infinity;
   r.spatial.grid.forEach(o => { cell[o.cell_y * GX + o.cell_x] = o; if (heat) { const v = cellChanVal(o, ch); if (v < vmin) vmin = v; if (v > vmax) vmax = v; } });
+  if (heat) setRampCtx(ch, vmin, vmax, 'mean');
+  if (heat && rampIsDiverging() && isFinite(vmin) && isFinite(vmax)) { const m = Math.max(Math.abs(vmin), Math.abs(vmax)); vmin = -m; vmax = m; }
   const colFn = (wx, ry) => { const o = cell[ry * GX + wx]; if (!o) return null; return heat ? vizRamp((cellChanVal(o, ch) - vmin) / ((vmax - vmin) || 1)) : `rgb(${o.mean_r},${o.mean_g},${o.mean_b})`; };
   const pe = _polarEnds(r.proj);
   drawPolarField(ctx, heat ? W - 44 : W, H, GX, GY, colFn, pe[0], pe[1]);
@@ -3769,7 +4427,7 @@ function applyPreset(name, btn) {
   const set = (cls, vals) => document.querySelectorAll('.' + cls).forEach(c => c.checked = vals.includes(c.value));
   if (name === 'full') {
     set('colSpace', ['RGB', 'HSV', 'LAB', 'LCH']); set('colStat', ['mean', 'median', 'std', 'range', 'iqr']);
-    set('colMetric', ['colourfulness', 'redness', 'cct', 'rms_contrast', 'dark_channel', 'warm_pct', 'hue_entropy', 'hue_circular_variance']);
+    set('colMetric', ['colourfulness', 'redness', 'cct', 'rms_contrast', 'dark_channel', 'warm_pct', 'hue_entropy', 'hue_circular_variance', 'chromaticity']);
   } else if (name === 'minimal') {
     set('colSpace', ['HSV']); set('colStat', ['mean']); set('colMetric', ['colourfulness']);
   } else {   // core
@@ -3782,6 +4440,7 @@ window.addEventListener('DOMContentLoaded', () => {
   syncAllBoxes();
   document.querySelectorAll('.colSpace, .colStat, .colMetric').forEach(el => el.addEventListener('change', () => { clearPreset(); syncAllBoxes(); }));
   document.querySelectorAll('.moranCh, .histCh, .vizType').forEach(el => el.addEventListener('change', syncAllBoxes));
+  renderResultsShell();
 });
 
 // ── CSV builders ────────────────────────────────────────────────────
@@ -3862,7 +4521,11 @@ function downloadImageCSV() {
   const moransKeys = (includeSpatial && sample.morans) ? Object.keys(sample.morans).map(c => 'morans_i_' + c) : [];
 
   const idCols = ['image_id', 'filename', 'source', 'width', 'height', 'analyzed_pixels', 'opaque_pct',
-    'exif_datetime', 'gps_lat', 'gps_lon', 'gps_alt', 'camera_make', 'camera_model', 'orientation'];
+    'exif_datetime', 'gps_lat', 'gps_lon', 'gps_alt', 'camera_make', 'camera_model', 'orientation',
+    // geometry provenance from the SunSync 360 sidecar — blank when none was loaded,
+    // so any figure built from this file can state how its frames were registered
+    'yaw_offset_deg', 'yaw_source', 'registration_status', 'elev_residual_deg',
+    'solar_elevation_deg', 'solar_azimuth_deg', 'air_mass'];
   const header = [...idCols, ...colourKeys.map(k => k[0]), ...metricKeys, ...moransKeys];
 
   const rows = window._results.map(r => {
@@ -3874,6 +4537,11 @@ function downloadImageCSV() {
       r.id, r.filename, r.source, r.width, r.height, m.analyzed_pixels, m.opaque_pct,
       r.exif.datetime ?? '', r.exif.gps_lat ?? '', r.exif.gps_lon ?? '', r.exif.gps_alt ?? '',
       r.exif.make ?? '', r.exif.model ?? '', r.exif.orientation ?? '',
+      r.azOffset ?? '', (r.geom && r.geom.yawSource) || '', (r.geom && r.geom.status) || '',
+      (r.geom && r.geom.resid != null) ? r.geom.resid : '',
+      (r.geom && r.geom.solarEl != null) ? r.geom.solarEl : '',
+      (r.geom && r.geom.solarAz != null) ? r.geom.solarAz : '',
+      (r.geom && r.geom.airMass != null) ? r.geom.airMass : '',
       ...colour, ...met, ...mor,
     ];
   });
@@ -3936,6 +4604,43 @@ function downloadProfilesCSV() {
   }
   if (!rows.length) { setStatus('No spatial data — enable "Spatial structure" before analyzing.', 'warning'); return; }
   downloadCSVText(buildCSV(header, rows), `colour_profiles_${todayStamp()}.csv`);
+}
+
+/* Scattering-angle profile — sky binned by angular distance from the sun rather
+   than by position in the frame. This is the export that is comparable between
+   datasets: two captures with different sun positions still line up on Θ.
+   Bins near Θ=0° and Θ=180° cover far less sky than bins near 90°, so read the
+   n column alongside the colour before drawing conclusions from a thin bin. */
+function downloadScatterCSV() {
+  const header = ['image_id', 'filename', 'yaw_offset_deg', 'yaw_source', 'solar_elevation_deg', 'solar_azimuth_deg',
+    'theta_lo_deg', 'theta_hi_deg', 'n_weighted', 'hex',
+    'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'HSV_H_mean', 'HSV_S_mean', 'HSV_V_mean',
+    'LAB_L_mean', 'LAB_A_mean', 'LAB_B_mean', 'LCH_C_mean', 'LCH_H_mean'];
+  const rows = [];
+  for (const r of window._results) {
+    if (!r.spatial || !r.spatial.scatter) continue;
+    const gm = r.geom || {};
+    for (const o of r.spatial.scatter) {
+      rows.push([r.id, r.filename, r.azOffset == null ? '' : r.azOffset, gm.yawSource || '',
+        gm.solarEl == null ? '' : gm.solarEl, gm.solarAz == null ? '' : gm.solarAz,
+        o.theta_lo, o.theta_hi, o.n, o.hex, o.mean_r, o.mean_g, o.mean_b,
+        o.hue, o.saturation, o.value, o.lightness, o.lab_a, o.lab_b, o.chroma, o.lch_h]);
+    }
+  }
+  if (!rows.length) { setStatus('No scattering-angle data — load a geometry sidecar, tick "scattering-angle bins", and re-run.', 'warning'); return; }
+  let csv = buildCSV(header, rows);
+  // second block: Θ × elevation, so the confound check is reproducible outside the tool
+  const h2 = ['image_id', 'filename', 'theta_lo_deg', 'theta_hi_deg', 'elev_lo_deg', 'elev_hi_deg', 'n_weighted', 'hex',
+    'RGB_R_mean', 'RGB_G_mean', 'RGB_B_mean', 'LAB_L_mean', 'LAB_A_mean', 'LAB_B_mean', 'LCH_C_mean'];
+  const r2 = [];
+  for (const r of window._results) {
+    if (!r.spatial || !r.spatial.scatter2d) continue;
+    for (const o of r.spatial.scatter2d.cells)
+      r2.push([r.id, r.filename, o.theta_lo, o.theta_hi, o.elev_lo, o.elev_hi, o.n, o.hex,
+        o.mean_r, o.mean_g, o.mean_b, o.lightness, o.lab_a, o.lab_b, o.chroma]);
+  }
+  if (r2.length) csv += '\n\n' + buildCSV(h2, r2);
+  downloadCSVText(csv, `colour_scattering_${todayStamp()}.csv`);
 }
 
 function downloadGridCSV() {
