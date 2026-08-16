@@ -1679,6 +1679,7 @@ function reportGeometryJoin(queuedNames) {
 function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, nAnalyzed, channels, weights, wrapX, azOffDeg, scat) {
   const useAz = wrapX && azOffDeg != null && isFinite(azOffDeg) && azOffDeg !== 0;
   const azShift = useAz ? (azOffDeg / 360) * w : 0;
+  const D2R = Math.PI / 180;
   const SNB = (scat && scat.bin > 0) ? scat.bin : 15;
   const NSB = scat ? Math.ceil(180 / SNB) : 0;
   const sN = new Float64Array(NSB), sR = new Float64Array(NSB), sG = new Float64Array(NSB), sB = new Float64Array(NSB);
@@ -1686,7 +1687,26 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
   // it might really be. Same bin width on both axes.
   const EB = scat ? Math.max(1, Math.ceil(Math.abs(scat.top - scat.bottom) / SNB)) : 0;
   const s2N = new Float64Array(EB * NSB), s2R = new Float64Array(EB * NSB), s2G = new Float64Array(EB * NSB), s2B = new Float64Array(EB * NSB);
-  const D2R = Math.PI / 180;
+  /* Θ × φ — the sun-centred polar grid. φ is the angle AROUND the sun, measured on a
+     basis built from the sun direction itself: U = ẑ × S is horizontal, V = S × U
+     points to the zenith side. So φ=0 is beside the sun, φ=90° is above it, φ=270°
+     below. That reference is defined by the sun rather than by the camera or the
+     compass, which is exactly why cells from different frames — different dates,
+     different solar azimuths — can be averaged together and still mean one thing. */
+  const NPB = scat ? 24 : 0, PHIW = 360 / (NPB || 1);
+  const spN = new Float64Array(NPB * NSB), spR = new Float64Array(NPB * NSB), spG = new Float64Array(NPB * NSB), spB = new Float64Array(NPB * NSB);
+  let sUx = 0, sUy = 0, sUz = 0, sVx = 0, sVy = 0, sVz = 0, sSx = 0, sSy = 0, sSz = 0;
+  if (scat) {
+    const ce = Math.cos(scat.sunEl * D2R), se = Math.sin(scat.sunEl * D2R);
+    const ca = Math.cos(scat.sunAz * D2R), sa = Math.sin(scat.sunAz * D2R);
+    sSx = ce * ca; sSy = ce * sa; sSz = se;
+    // U = ẑ × S (horizontal, perpendicular to the sun's azimuth)
+    let ux = -sSy, uy = sSx, uz = 0;
+    const un = Math.hypot(ux, uy, uz) || 1; ux /= un; uy /= un; uz /= un;
+    sUx = ux; sUy = uy; sUz = uz;
+    // V = S × U (the zenith side, perpendicular to S)
+    sVx = sSy * uz - sSz * uy; sVy = sSz * ux - sSx * uz; sVz = sSx * uy - sSy * ux;
+  }
   const sinSun = scat ? Math.sin(scat.sunEl * D2R) : 0, cosSun = scat ? Math.cos(scat.sunEl * D2R) : 0;
   const GX = Math.max(1, gridX | 0), GY = Math.max(1, gridY | 0);
   const chans = (channels && channels.length) ? channels : ['L'];
@@ -1720,6 +1740,12 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
       const eb = Math.min(EB - 1, Math.max(0, Math.floor(Math.abs(el - scat.top) / SNB)));
       const c2 = eb * NSB + sb;
       s2N[c2] += wt; s2R[c2] += wt * r; s2G[c2] += wt * g; s2B[c2] += wt * b;
+      const cel = Math.cos(el * D2R), dvx = cel * Math.cos(bearing * D2R), dvy = cel * Math.sin(bearing * D2R), dvz = Math.sin(el * D2R);
+      const pu = dvx * sUx + dvy * sUy + dvz * sUz, pv = dvx * sVx + dvy * sVy + dvz * sVz;
+      let phi = Math.atan2(pv, pu) / D2R; if (phi < 0) phi += 360;
+      const pb = Math.min(NPB - 1, Math.floor(phi / PHIW));
+      const c3 = pb * NSB + sb;
+      spN[c3] += wt; spR[c3] += wt * r; spG[c3] += wt * g; spB[c3] += wt * b;
     }
     const gx = Math.min(GX - 1, Math.floor(xa / w * GX)), gy = Math.min(GY - 1, Math.floor(y / h * GY));
     const ci = gy * GX + gx; cN[ci] += wt; cR[ci] += wt * r; cG[ci] += wt * g; cB[ci] += wt * b;
@@ -1739,8 +1765,17 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
     for (let k = 0; k < N.length; k++) { if (!N[k]) continue; const o = derive(R[k] / N[k], Gc[k] / N[k], B[k] / N[k]); o.index = k; o.n = N[k]; out.push(o); } return out; };
   const rows = profile(rowN, rowR, rowG, rowB);
   const cols = profile(colN, colR, colG, colB);
-  let scatter = null, scatter2d = null;
+  let scatter = null, scatter2d = null, scatterPolar = null;
   if (scat) {
+    scatterPolar = { thetaBins: NSB, phiBins: NPB, bin: SNB, phiWidth: PHIW, sunEl: scat.sunEl, sunAz: scat.sunAz, cells: [] };
+    for (let p2 = 0; p2 < NPB; p2++) for (let k = 0; k < NSB; k++) {
+      const c3 = p2 * NSB + k; if (!spN[c3]) continue;
+      const o = derive(spR[c3] / spN[c3], spG[c3] / spN[c3], spB[c3] / spN[c3]);
+      o.theta_bin = k; o.phi_bin = p2; o.n = spN[c3];
+      o.theta_lo = k * SNB; o.theta_hi = Math.min(180, (k + 1) * SNB);
+      o.phi_lo = p2 * PHIW; o.phi_hi = (p2 + 1) * PHIW;
+      scatterPolar.cells.push(o);
+    }
     scatter2d = { thetaBins: NSB, elevBins: EB, bin: SNB, top: scat.top, bottom: scat.bottom, cells: [] };
     for (let e = 0; e < EB; e++) for (let k = 0; k < NSB; k++) {
       const c2 = e * NSB + k; if (!s2N[c2]) continue;
@@ -1788,7 +1823,7 @@ function computeSpatial(pixels, coords, w, h, kmLabels, clusters, gridX, gridY, 
     c.centroid_x_rel = Math.round(cx / w * 1000) / 1000; c.centroid_y_rel = Math.round(cy / h * 1000) / 1000;
     c.spatial_spread_rel = Math.round(spread / diag * 1000) / 1000; });
 
-  return { rows, cols, grid, morans, morans_channels: chans, gridX: GX, gridY: GY, srcW: w, srcH: h, scatter, scatter2d, azOffset: useAz ? azOffDeg : null };
+  return { rows, cols, grid, morans, morans_channels: chans, gridX: GX, gridY: GY, srcW: w, srcH: h, scatter, scatter2d, scatterPolar, azOffset: useAz ? azOffDeg : null };
 }
 
 // Polar spatial: GX angular wedges (azimuth) × GY radial rings (elevation, centre→rim).
@@ -2842,6 +2877,8 @@ function renderResults(cards, total, ok, failed, opts) {
               <option value="dsphase">Phase curve (metric vs Θ)</option>
               <option value="dsscat2d">Θ × elevation (confound check)</option>
               <option value="dsstrip">Θ colour strip</option>
+              <option value="dssunc">Sun-centred composite (dataset)</option>
+              <option value="dsschema">How a Θ bin is built (explanatory)</option>
             </optgroup>
           </select>
           <select id="rampSel" class="proj-sel" onchange="setRamp(this.value)" title="Colour ramp used for all metric heatmaps (per-image and dataset)">
@@ -2928,11 +2965,27 @@ function showDatasetViz(kind) {
       [['image', 'image means'], ['cluster', 'all clusters']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaLevel || 'image') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') +
       '</select> <span style="font-size:0.72rem;margin-left:.4rem">colour by:</span> <select style="font-size:0.72rem" onchange="setDsChromaColour(this.value)">' +
       [['date', 'capture date'], ['none', 'single colour']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaColour || 'date') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
-    else if (['dsscat', 'dsphase', 'dsscat2d', 'dsstrip'].includes(kind)) {
+    else if (kind === 'dssunc') {
+      const D = dsSuncCells(_scatCh(), _suncMeasure());
+      const gsel = D ? '<span style="font-size:0.72rem;margin-left:.4rem">group:</span> <select style="font-size:0.72rem" onchange="window._dsState.suncGroup=this.value;drawDatasetViz()">'
+        + D.groups.map(g => `<option value="${escapeHtml(g)}" ${D.group === g ? 'selected' : ''}>${escapeHtml(g)}</option>`).join('') + '</select>' : '';
+      ctl.innerHTML =
+        '<span style="font-size:0.72rem">show:</span> <select style="font-size:0.72rem" onchange="setSuncMeasure(this.value)">'
+        + [['mean', 'mean of metric'], ['median', 'median across frames'], ['sd', 'SD across frames'], ['colour', 'mean sky colour']]
+            .map(o => `<option value="${o[0]}" ${_suncMeasure() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select> '
+        + (_suncMeasure() === 'colour' ? '' :
+          '<span style="font-size:0.72rem;margin-left:.4rem">metric:</span> <select style="font-size:0.72rem" onchange="setScatCh(this.value)">'
+          + SCAT_CH.map(o => `<option value="${o[0]}" ${_scatCh() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>')
+        + gsel
+        + '<span style="font-size:0.72rem;margin-left:.4rem">group by:</span> <select style="font-size:0.72rem" onchange="setScatGroup(this.value)">'
+        + [['date', 'capture date'], ['folder', 'sidecar dataset'], ['none', 'all together']]
+            .map(o => `<option value="${o[0]}" ${_scatGroupMode() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+    }
+    else if (['dsscat', 'dsphase', 'dsscat2d', 'dsstrip', 'dsschema'].includes(kind)) {
       const chSel = kind === 'dsstrip' ? '' :
         '<span style="font-size:0.72rem">metric:</span> <select style="font-size:0.72rem" onchange="setScatCh(this.value)">' +
         SCAT_CH.map(o => `<option value="${o[0]}" ${_scatCh() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select> ';
-      const grpSel = kind === 'dsscat2d' ? '' :
+      const grpSel = (kind === 'dsscat2d' || kind === 'dsschema') ? '' :
         '<span style="font-size:0.72rem;margin-left:.4rem">group by:</span> <select style="font-size:0.72rem" onchange="setScatGroup(this.value)">' +
         [['date', 'capture date'], ['folder', 'sidecar dataset'], ['none', 'all together']]
           .map(o => `<option value="${o[0]}" ${_scatGroupMode() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
@@ -2965,6 +3018,8 @@ function renderDatasetViz(ctx, W, H) {
   if (st.kind === 'dsphase') { drawScatPhase(ctx, W, H); return; }
   if (st.kind === 'dsscat2d') { drawScat2D(ctx, W, H); return; }
   if (st.kind === 'dsstrip') { drawScatStrip(ctx, W, H); return; }
+  if (st.kind === 'dssunc') { drawSuncComposite(ctx, W, H); return; }
+  if (st.kind === 'dsschema') { drawScatSchema(ctx, W, H); return; }
   if (['dsgrid', 'dsvar', 'dselev', 'dsazim', 'dsclust'].includes(st.kind)) { renderDatasetSpatial(ctx, W, H); return; }
   if (st.kind === 'dschroma') { drawDatasetChromaticity(ctx, W, H); return; }
   if (st.kind === 'palette') {
@@ -3540,6 +3595,319 @@ function drawWeightStrip(ctx, xLeft, y, plotW, bins, thetaMax, binW) {
   ctx.restore();
 }
 
+
+
+/* ══════════ SUN-CENTRED DATASET COMPOSITE ══════════
+   The per-frame sun-centred view lives in SunSync; this is its dataset form. Radius
+   is the scattering angle Θ, angle around the disk is φ — the rotation about the
+   sun measured on a basis the sun itself defines (φ=0 beside it, 90° toward the
+   zenith, 270° toward the ground). Because that frame of reference is anchored to
+   the sun and not to the camera or the compass, cells from different dates and
+   different solar azimuths describe the same piece of sky-relative-to-sun and can
+   legitimately be averaged.
+   Mean is a weight-weighted mean across frames; median and SD are taken over the
+   per-frame values in each cell, so they say how consistent the group was, not just
+   what it averaged to. */
+function _suncMeasure() { return (window._dsState && window._dsState.suncMeasure) || 'mean'; }
+function setSuncMeasure(v) { window._dsState.suncMeasure = v; drawDatasetViz(); }
+function dsSuncCells(ch, measure) {
+  const all = (window._results || []).filter(r => r.spatial && r.spatial.scatterPolar && r.spatial.scatterPolar.cells.length);
+  if (!all.length) return null;
+  const groups = scatGroupsOf(all);
+  const names = Object.keys(groups).sort();
+  const pick = (window._dsState && window._dsState.suncGroup) || names[0];
+  const res = groups[pick] || all;
+  const meta = res[0].spatial.scatterPolar;
+  const NT = meta.thetaBins, NP = meta.phiBins, N = NT * NP;
+  const wN = new Float64Array(N), wR = new Float64Array(N), wG = new Float64Array(N), wB = new Float64Array(N);
+  const per = Array.from({ length: N }, () => []);
+  for (const r of res) for (const o of r.spatial.scatterPolar.cells) {
+    const i = o.phi_bin * NT + o.theta_bin; if (i < 0 || i >= N) continue;
+    wN[i] += o.n; wR[i] += o.mean_r * o.n; wG[i] += o.mean_g * o.n; wB[i] += o.mean_b * o.n;
+    const v = scatVal(o, ch); if (typeof v === 'number' && isFinite(v)) per[i].push(v);
+  }
+  const vals = new Float64Array(N).fill(NaN), rgb = new Array(N).fill(null);
+  for (let i = 0; i < N; i++) {
+    if (!wN[i]) continue;
+    const mr = wR[i] / wN[i], mg = wG[i] / wN[i], mb = wB[i] / wN[i];
+    rgb[i] = `rgb(${Math.round(mr)},${Math.round(mg)},${Math.round(mb)})`;
+    if (measure === 'mean') {
+      const [hh, ss, vv] = rgbToHsv(mr, mg, mb), [L, A, Bb] = rgbToLab(mr, mg, mb), [C] = labToLch(L, A, Bb);
+      vals[i] = scatVal({ mean_r: mr, mean_g: mg, mean_b: mb, hue: hh, saturation: ss, value: vv, lightness: L, lab_a: A, lab_b: Bb, chroma: C }, ch);
+    } else if (per[i].length) {
+      vals[i] = measure === 'median' ? _median(per[i])
+        : Math.sqrt(per[i].reduce((a, v) => a + (v - per[i].reduce((x, y) => x + y, 0) / per[i].length) ** 2, 0) / per[i].length);
+    }
+  }
+  const sunEls = res.map(r => r.geom && r.geom.solarEl).filter(v => typeof v === 'number');
+  const meanSunEl = sunEls.length ? sunEls.reduce((a, b) => a + b, 0) / sunEls.length : null;
+  return { vals, rgb, wN, NT, NP, meta, nImg: res.length, group: pick, groups: names, meanSunEl,
+           nFramesPerCell: per.map(a => a.length) };
+}
+function drawSuncComposite(ctx, W, H) {
+  const ch = _scatCh(), measure = _suncMeasure();
+  const D = dsSuncCells(ch, measure);
+  if (!D) return _noScat(ctx, W, H);
+  const colourMode = measure === 'colour';
+  const { vals, rgb, NT, NP, meta } = D;
+  let vmin = Infinity, vmax = -Infinity;
+  if (!colourMode) for (let i = 0; i < vals.length; i++) { const v = vals[i]; if (!isNaN(v)) { if (v < vmin) vmin = v; if (v > vmax) vmax = v; } }
+  if (!colourMode && !isFinite(vmin)) return _noScat(ctx, W, H);
+  if (!colourMode) { setRampCtx(ch, vmin, vmax, measure === 'sd' ? 'sd' : 'mean');
+    if (rampIsDiverging()) { const m = Math.max(Math.abs(vmin), Math.abs(vmax)); vmin = -m; vmax = m; } }
+
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText('Sun-centred composite — ' + (colourMode ? 'mean sky colour' :
+    ({ mean: 'mean ', median: 'median ', sd: 'variability (SD) of ' }[measure] || '') + scatChLabel(ch)), 8, 14);
+  _vizSub(ctx, D.group + ' · ' + D.nImg + ' frame(s) · radius = Θ, angle = rotation about the sun'
+    + (colourMode ? '' : ' · ramp: ' + rampAutoWhy()));
+
+  const mT = 42, mR = colourMode ? 16 : 74, mB = 26;
+  const legendW = 250;                       // the wide short canvas leaves room to explain φ
+  const size = Math.min(W - 16 - mR - legendW, H - mT - mB);
+  const R = size / 2 - 16, cx = 8 + size / 2, cy = mT + size / 2;
+  const TMAX = 180;
+  const A0 = ph => -(ph) * Math.PI / 180;   // φ=0 to the right, φ=90 upward (canvas y is inverted)
+
+  for (let p = 0; p < NP; p++) for (let k = 0; k < NT; k++) {
+    const i = p * NT + k;
+    if (!D.wN[i]) continue;
+    const col = colourMode ? rgb[i] : (isNaN(vals[i]) ? null : vizRamp((vals[i] - vmin) / ((vmax - vmin) || 1)));
+    if (!col) continue;
+    const r0 = (k * meta.bin / TMAX) * R, r1 = (Math.min(TMAX, (k + 1) * meta.bin) / TMAX) * R;
+    const a0 = A0(p * meta.phiWidth), a1 = A0((p + 1) * meta.phiWidth);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r1, a1, a0);
+    ctx.arc(cx, cy, r0, a0, a1, true);
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+  }
+  // Θ rings
+  ctx.strokeStyle = 'rgba(26,35,50,.30)'; ctx.lineWidth = 1;
+  ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#1a2332';
+  // labels along a diagonal rather than stacked up one radius, so they never collide
+  for (let th = 30; th <= 150; th += 30) {
+    const rr = (th / TMAX) * R, aa = -50 * Math.PI / 180;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 2 * Math.PI); ctx.stroke();
+    _haloText(ctx, 'Θ ' + th + '°', cx + rr * Math.cos(aa), cy + rr * Math.sin(aa) + 3, '#fff', 'rgba(20,30,40,.8)');
+  }
+  ctx.strokeStyle = 'rgba(26,35,50,.5)'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.stroke();
+  // the horizon, for the group's mean solar elevation — its shape depends only on
+  // that elevation, so one indicative curve is honest for a matched group
+  if (D.meanSunEl != null) {
+    const e = D.meanSunEl * Math.PI / 180;
+    ctx.strokeStyle = colourMode ? '#2c5f7a' : 'rgba(255,255,255,.85)';
+    ctx.setLineDash([5, 4]); ctx.lineWidth = 1.6; ctx.beginPath();
+    let started = false;
+    for (let b = 0; b <= 360; b += 2) {
+      const br = b * Math.PI / 180;
+      const th = Math.acos(Math.max(-1, Math.min(1, Math.cos(e) * Math.cos(br)))) * 180 / Math.PI;
+      const phi = Math.atan2(-Math.sin(e) * Math.cos(br), Math.sin(br)) * 180 / Math.PI;
+      const rr = (th / TMAX) * R, aa = A0(phi);
+      const x = cx + rr * Math.cos(aa), y = cy + rr * Math.sin(aa);
+      started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), started = true);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // orientation marks: which way is up
+  ctx.font = '600 10px sans-serif'; ctx.textAlign = 'center';
+  _haloText(ctx, '↑ toward zenith', cx, cy - R - 6, '#1a2332');
+  _haloText(ctx, '↓ toward ground', cx, cy + R + 14, '#1a2332');
+  ctx.fillStyle = '#e8a33d'; ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 2 * Math.PI); ctx.fill();
+  _haloText(ctx, 'sun', cx - 16, cy + 4, '#e8a33d');
+  ctx.textAlign = 'left';
+  if (!colourMode) drawRampLegend(ctx, 8 + size + 10, mT + 6, size - 30, vmin, vmax);
+
+  // side legend — there is room, and φ needs saying in words
+  const lx = W - legendW + 6;
+  let ly = mT + 6;
+  const line = (t, bold, col) => {
+    ctx.fillStyle = col || (bold ? '#1a2332' : '#6b7a8d');
+    ctx.font = (bold ? '600 ' : '') + '10px sans-serif';
+    ctx.fillText(t, lx, ly); ly += bold ? 15 : 13;
+  };
+  line('Reading this figure', true);
+  line('Distance from centre is Θ, the angle');
+  line('from the sun. The centre IS the sun;');
+  line('the rim is the antisolar point.');
+  ly += 5;
+  line('Angle around the disk is φ, measured', true);
+  line('about the sun itself: up = toward the');
+  line('zenith, down = toward the ground.');
+  line('That reference comes from the sun,');
+  line('not the camera or the compass — which');
+  line('is why frames from different dates and');
+  line('solar azimuths can be averaged here.');
+  ly += 5;
+  if (D.meanSunEl != null) {
+    line('Dashed line', true, colourMode ? '#2c5f7a' : '#1a2332');
+    line('the horizon at this group’s mean solar');
+    line('elevation, ' + D.meanSunEl.toFixed(1) + '° — sky inside it, ground');
+    line('outside. Its shape depends only on');
+    line('that elevation.');
+    ly += 5;
+  }
+  if (measure === 'sd') { line('Bright cells', true); line('the frames disagreed there.'); }
+  else if (measure === 'median') { line('Median across frames', true); line('robust to one odd frame.'); }
+  else if (colourMode) { line('Measured colour', true); line('no ramp — this is the sky itself.'); }
+  const cellsWith = D.nFramesPerCell.filter(v => v > 0).length;
+  ly += 5; line(cellsWith + ' of ' + (D.NT * D.NP) + ' cells carry data', true);
+}
+/* ══════════ EXPLANATORY FIGURE: frame → bins → curve ══════════
+   Everything else plots Θ on an axis; nothing shows a reader WHERE Θ=30° or 120°
+   actually is. This is the walk-them-through-it figure: the same frame raw, then
+   with the annuli drawn on it, then the curve those annuli produce — plus the
+   solid-angle panel that explains why the end bins are thin. */
+function _schemaRec() {
+  return (window._results || []).find(r => r.spatial && r.spatial.scatter && r.spatial.scatter.length
+    && r.geom && r.geom.solarEl != null && r.azOffset != null) || null;
+}
+function _scatTheta(bearing, el, sunAz, sunEl) {
+  const D = Math.PI / 180;
+  const ct = Math.sin(el * D) * Math.sin(sunEl * D)
+           + Math.cos(el * D) * Math.cos(sunEl * D) * Math.cos((bearing - sunAz) * D);
+  return Math.acos(Math.max(-1, Math.min(1, ct))) / D;
+}
+function _haloText(ctx, t, x, y, col, halo) {
+  ctx.save(); ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.strokeStyle = halo || 'rgba(255,255,255,.85)';
+  ctx.strokeText(t, x, y); ctx.fillStyle = col || 'rgba(120,230,170,.98)'; ctx.fillText(t, x, y); ctx.restore();
+}
+function drawScatSchema(ctx, W, H) {
+  const r = _schemaRec();
+  if (!r) {
+    ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif';
+    ctx.fillText('Needs one registered frame with scattering-angle bins.', 12, 30);
+    ctx.font = '11px sans-serif';
+    ctx.fillText('Load a SunSync 360 sidecar, tick “scattering-angle bins”, and re-run.', 12, 50);
+    return;
+  }
+  let img = r._imgEl;
+  if (!img) { img = r._imgEl = new Image(); img.onload = () => drawDatasetViz(); img.src = r.thumbUrl; }
+  const ready = img.complete && img.naturalWidth;
+
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText('How a scattering-angle bin is built — ' + r.filename, 8, 14);
+  _vizSub(ctx, 'sun at elevation ' + r.geom.solarEl.toFixed(1) + '°, azimuth ' + r.geom.solarAz.toFixed(1)
+    + '° · frame registered by ' + (r.geom.yawSource || 'sidecar') + ' (yaw ' + r.azOffset.toFixed(2) + '°)');
+
+  const mT = 50, gap = 10, botH = 96;
+  const panelW = (W - 16 - 2 * gap) / 3;
+  const panelH = H - mT - botH - 14;
+  const top = mT;
+  const sunAz = r.geom.solarAz, sunEl = r.geom.solarEl, yaw = r.azOffset;
+  const elTop = (r.proj && r.proj.top != null) ? r.proj.top : 90;
+  const elBot = (r.proj && r.proj.bottom != null) ? r.proj.bottom : -90;
+  const azSpan = (r.proj && r.proj.azSpan) || 360;
+
+  const drawImgInto = (x, y, w, h) => {
+    if (!ready) { ctx.fillStyle = '#eef3f6'; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#8a97a6'; ctx.font = '10px sans-serif'; ctx.fillText('loading image…', x + 8, y + 18); return null; }
+    const sc = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+    const dw = img.naturalWidth * sc, dh = img.naturalHeight * sc;
+    const dx = x + (w - dw) / 2, dy = y + (h - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+    return { dx, dy, dw, dh };
+  };
+  const panelTitle = (t, x, y) => { ctx.fillStyle = '#1a2332'; ctx.font = '600 10px sans-serif'; ctx.fillText(t, x, y); };
+
+  // ── panel 1: the frame as it is
+  panelTitle('1 · the registered frame', 8, top - 4);
+  drawImgInto(8, top, panelW, panelH);
+
+  // ── panel 2: the same frame with the annuli drawn on it
+  const x2 = 8 + panelW + gap;
+  panelTitle('2 · annuli at 30° intervals', x2, top - 4);
+  const box = drawImgInto(x2, top, panelW, panelH);
+  if (box) {
+    const st = 2;
+    for (let py = 0; py < box.dh; py += st) {
+      const el = elTop + (elBot - elTop) * (py / box.dh);
+      for (let px = 0; px < box.dw; px += st) {
+        const bearing = (px / box.dw) * azSpan - yaw;
+        const k = Math.floor(_scatTheta(bearing, el, sunAz, sunEl) / 30);
+        if (k % 2) continue;
+        ctx.fillStyle = 'rgba(120,230,170,.16)';
+        ctx.fillRect(box.dx + px, box.dy + py, st, st);
+      }
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.strokeRect(box.dx, box.dy, box.dw, box.dh);
+    ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+    // mark the sun where it sits in the registered frame
+    const sxf = (((sunAz + yaw) % azSpan) + azSpan) % azSpan / azSpan;
+    const syf = (sunEl - elTop) / ((elBot - elTop) || 1);
+    if (syf >= 0 && syf <= 1) {
+      const sx = box.dx + sxf * box.dw, sy = box.dy + syf * box.dh;
+      ctx.strokeStyle = '#e8a33d'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(sx, sy, 7, 0, 2 * Math.PI); ctx.stroke();
+      _haloText(ctx, 'sun · Θ=0°', sx + 11, sy - 9, '#e8a33d');
+    }
+    _haloText(ctx, 'tinted bands = alternate 30° annuli', box.dx + 4, box.dy + 12);
+  }
+
+  // ── panel 3: the curve those annuli produce
+  const x3 = 8 + 2 * (panelW + gap);
+  panelTitle('3 · the resulting profile', x3, top - 4);
+  const ch = _scatCh(), bins = r.spatial.scatter;
+  let y0 = Infinity, y1 = -Infinity;
+  bins.forEach(b => { const v = scatVal(b, ch); if (v < y0) y0 = v; if (v > y1) y1 = v; });
+  if (y1 - y0 < 1e-6) { y0 -= 1; y1 += 1; }
+  const pad = (y1 - y0) * 0.15; y0 -= pad; y1 += pad;
+  const pL = x3 + 34, pT = top + 6, pW = panelW - 42, pH = panelH - 30;
+  ctx.strokeStyle = '#eef3f6';
+  for (let i = 0; i <= 4; i++) {
+    const yy = Math.round(pT + (i / 4) * pH) + 0.5;
+    ctx.beginPath(); ctx.moveTo(pL, yy); ctx.lineTo(pL + pW, yy); ctx.stroke();
+  }
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText((Math.round(y1 * 10) / 10) + '', pL - 4, pT + 6);
+  ctx.fillText((Math.round(y0 * 10) / 10) + '', pL - 4, pT + pH);
+  ctx.textAlign = 'left';
+  const TMAX = 180;
+  ctx.strokeStyle = '#2c5f7a'; ctx.lineWidth = 1.8; ctx.beginPath();
+  bins.forEach((b, i) => {
+    const x = pL + ((b.theta_lo + b.theta_hi) / 2 / TMAX) * pW;
+    const y = pT + (1 - (scatVal(b, ch) - y0) / ((y1 - y0) || 1)) * pH;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.stroke();
+  const wMax = Math.max(...bins.map(b => b.n)) || 1;
+  bins.forEach(b => {
+    const x = pL + ((b.theta_lo + b.theta_hi) / 2 / TMAX) * pW;
+    const y = pT + (1 - (scatVal(b, ch) - y0) / ((y1 - y0) || 1)) * pH;
+    ctx.fillStyle = '#1a9080'; ctx.beginPath(); ctx.arc(x, y, 1.5 + 3.5 * Math.sqrt(b.n / wMax), 0, 2 * Math.PI); ctx.fill();
+  });
+  ctx.strokeStyle = '#dde8ed'; ctx.lineWidth = 1; ctx.strokeRect(pL, pT, pW, pH);
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+  for (let d = 0; d <= 180; d += 60) ctx.fillText(d + '°', pL + (d / TMAX) * pW, pT + pH + 11);
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 9px sans-serif';
+  ctx.fillText(scatChLabel(ch) + ' vs Θ', pL + pW / 2, pT + pH + 22);
+  ctx.textAlign = 'left';
+
+  // ── bottom: how much sky each annulus actually holds
+  const bT = H - botH + 6, bL = 46, bW = W - bL - 16, bH = botH - 34;
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 10px sans-serif';
+  ctx.fillText('4 · how much sky each annulus holds', 8, bT - 4);
+  // an annulus of fixed angular width at Θ covers solid angle ∝ sin Θ — zero at both
+  // poles of the sun-antisun axis, greatest at 90°. This is why the end bins are noisy.
+  ctx.fillStyle = 'rgba(44,95,122,.16)'; ctx.beginPath(); ctx.moveTo(bL, bT + bH);
+  for (let d = 0; d <= 180; d += 2) ctx.lineTo(bL + (d / 180) * bW, bT + bH - Math.sin(d * Math.PI / 180) * bH);
+  ctx.lineTo(bL + bW, bT + bH); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(44,95,122,.6)'; ctx.lineWidth = 1.2; ctx.beginPath();
+  for (let d = 0; d <= 180; d += 2) { const x = bL + (d / 180) * bW, y = bT + bH - Math.sin(d * Math.PI / 180) * bH; d ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.stroke();
+  bins.forEach(b => {
+    const x0 = bL + (b.theta_lo / 180) * bW, x1b = bL + (b.theta_hi / 180) * bW;
+    const h = (b.n / wMax) * bH;
+    ctx.fillStyle = 'rgba(26,144,128,.55)';
+    ctx.fillRect(x0 + 1, bT + bH - h, Math.max(1, x1b - x0 - 2), h);
+  });
+  ctx.strokeStyle = '#dde8ed'; ctx.lineWidth = 1; ctx.strokeRect(bL, bT, bW, bH);
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+  for (let d = 0; d <= 180; d += 30) ctx.fillText(d + '°', bL + (d / 180) * bW, bT + bH + 10);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
+  ctx.fillText('shaded = sin Θ, the sky an annulus covers in principle · bars = sky this frame actually sampled', bL, bT + bH + 21);
+}
+
 /* ── 1. Θ × dataset heatmap — the cross-dataset comparison figure ── */
 function drawScatHeat(ctx, W, H) {
   const D = dsScatterGroups(); if (!D) return _noScat(ctx, W, H);
@@ -3942,7 +4310,8 @@ function syncRampUI() {
   const divOk = metricIsSigned(c.ch, c.measure) && rampStraddlesZero(c);
   // views that draw measured colour or categorical series never consult the ramp
   const kind = (window._dsState || {}).kind;
-  const rampUnused = ['dsphase', 'dsstrip', 'palette', 'dschroma', 'hist'].includes(kind);
+  const rampUnused = ['dsphase', 'dsstrip', 'dsschema', 'palette', 'dschroma', 'hist'].includes(kind)
+    || (kind === 'dssunc' && _suncMeasure() === 'colour');
   sel.disabled = rampUnused;
   sel.style.opacity = rampUnused ? 0.45 : 1;
   if (rampUnused) { sel.title = 'This view draws measured colour or per-dataset series — no ramp is used.'; return; }
