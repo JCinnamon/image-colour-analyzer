@@ -2989,7 +2989,12 @@ function showDatasetViz(kind) {
         '<span style="font-size:0.72rem;margin-left:.4rem">group by:</span> <select style="font-size:0.72rem" onchange="setScatGroup(this.value)">' +
         [['date', 'capture date'], ['folder', 'sidecar dataset'], ['none', 'all together']]
           .map(o => `<option value="${o[0]}" ${_scatGroupMode() === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
-      ctl.innerHTML = chSel + grpSel;
+      const stdSel = kind === 'dsphase'
+        ? '<label style="font-size:0.72rem;margin-left:.55rem;cursor:pointer" title="Restrict to the &#920; × elevation cells every group occupies, then re-weight all groups to one shared elevation composition. Removes the tilt caused by the sun sitting at a different height in each capture.">'
+          + '<input type="checkbox" ' + (_scatStd() ? 'checked ' : '')
+          + 'onchange="setScatStd(this.checked)" style="vertical-align:-1px"> standardise for solar geometry</label>'
+        : '';
+      ctl.innerHTML = chSel + grpSel + stdSel;
     }
     else ctl.innerHTML = '';
   }
@@ -3015,7 +3020,7 @@ function renderDatasetViz(ctx, W, H) {
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   const st = window._dsState;
   if (st.kind === 'dsscat') { drawScatHeat(ctx, W, H); return; }
-  if (st.kind === 'dsphase') { drawScatPhase(ctx, W, H); return; }
+  if (st.kind === 'dsphase') { (_scatStd() ? drawScatPhaseStd : drawScatPhase)(ctx, W, H); return; }
   if (st.kind === 'dsscat2d') { drawScat2D(ctx, W, H); return; }
   if (st.kind === 'dsstrip') { drawScatStrip(ctx, W, H); return; }
   if (st.kind === 'dssunc') { drawSuncComposite(ctx, W, H); return; }
@@ -3596,6 +3601,204 @@ function drawWeightStrip(ctx, xLeft, y, plotW, bins, thetaMax, binW) {
 }
 
 
+
+/* ══════════ SOLAR-GEOMETRY STANDARDISATION (new in v11) ══════════
+   The cos(elevation) pixel weight corrects a distortion of ONE sphere: the grid
+   misrepresents the sky and the weight puts it back. It cannot make two captures at
+   different solar elevations comparable, because those captures did not observe the
+   same sky. At a fixed Θ the sky forms a ring around the sun, and how much of that
+   ring clears the horizon depends on the sun's elevation — so each capture's Θ bin is
+   built from a different mix of elevations.
+
+   Measured on the real geometry (uniform-solid-angle sampling of the upper hemisphere),
+   the mean elevation sampled at Θ=100–110° is 37° for a sun at 11.5° but 13° for a sun
+   at 55.6°; at Θ=10–20° the gap runs the other way, −38°. The bias CHANGES SIGN along
+   the curve, so it TILTS the phase curve rather than offsetting it — which is exactly
+   the shape a genuine atmospheric difference has. No scalar weight in Θ can remove it.
+
+   Direct standardisation does remove it. It is the age-standardised-rate move from
+   epidemiology: restrict to the Θ × elevation cells that every group actually occupies,
+   then re-weight each group's cells to ONE common reference composition, so every
+   group's Θ bin is built from the same elevation mix. The confound then cancels by
+   construction rather than being argued away.
+
+   The reference used here is the mean of the groups' own normalised compositions, so
+   no single dataset is privileged. The cost is coverage — only shared cells can be
+   used — and the surviving fraction of each group's sky is reported ON the figure,
+   because it is part of the result, not a footnote.
+
+   NOTE this removes the GEOMETRIC elevation confound, not a physical one. Sky at 10°
+   elevation really does carry more airmass than sky at 40°; the reference composition
+   is a declared choice, not a neutral fact. State it in the caption. */
+
+function _scatStd() { return !!(window._dsState && window._dsState.scatStd); }
+function setScatStd(v) { window._dsState.scatStd = !!v; drawDatasetViz(); }
+
+function scatValFromRGB(mr, mg, mb, ch) {
+  const [hh, ss, vv] = rgbToHsv(mr, mg, mb), [L, A, Bb] = rgbToLab(mr, mg, mb), [C] = labToLch(L, A, Bb);
+  return scatVal({ mean_r: mr, mean_g: mg, mean_b: mb, hue: hh, saturation: ss, value: vv,
+                   lightness: L, lab_a: A, lab_b: Bb, chroma: C }, ch);
+}
+
+/* Per-group Θ × elevation grids. drawScat2D pools every image into one grid; standardising
+   needs them kept apart, because the whole point is that the groups differ in composition. */
+function dsScat2DGroups() {
+  const res = (window._results || []).filter(r => r.spatial && r.spatial.scatter2d && r.spatial.scatter2d.cells.length);
+  if (!res.length) return null;
+  const meta = res[0].spatial.scatter2d, NT = meta.thetaBins, NE = meta.elevBins;
+  const gm = scatGroupsOf(res), out = [];
+  for (const name of Object.keys(gm).sort()) {
+    const n = new Float64Array(NT * NE), R = new Float64Array(NT * NE),
+          G = new Float64Array(NT * NE), B = new Float64Array(NT * NE);
+    let tot = 0;
+    for (const r of gm[name]) for (const o of r.spatial.scatter2d.cells) {
+      const i = o.elev_bin * NT + o.theta_bin; if (i < 0 || i >= n.length) continue;
+      n[i] += o.n; R[i] += o.mean_r * o.n; G[i] += o.mean_g * o.n; B[i] += o.mean_b * o.n; tot += o.n;
+    }
+    out.push({ name, nImg: gm[name].length, n, R, G, B, tot });
+  }
+  return { groups: out, NT, NE, meta };
+}
+
+/* Direct standardisation of the phase curve. Returns null when it cannot be done
+   honestly — one group, or no Θ × elevation grid to stratify on. */
+function dsScatStandardised() {
+  const D2 = dsScat2DGroups();
+  if (!D2) return null;
+  if (D2.groups.length < 2) return { insufficient: 'one-group' };
+  const { groups, NT, NE, meta } = D2;
+
+  // A cell counts as occupied only if it holds enough sky to trust — a handful of
+  // stray pixels at the edge of a mask must not define the common support.
+  const occ = groups.map(g => {
+    const thr = Math.max(10, 0.0002 * g.tot), o = new Uint8Array(NT * NE);
+    for (let i = 0; i < o.length; i++) o[i] = g.n[i] >= thr ? 1 : 0;
+    return o;
+  });
+  const shared = new Uint8Array(NT * NE);
+  for (let i = 0; i < shared.length; i++) shared[i] = occ.every(o => o[i]) ? 1 : 0;
+
+  // Reference composition = mean of the groups' own normalised cell shares.
+  const ref = new Float64Array(NT * NE);
+  for (let i = 0; i < ref.length; i++) if (shared[i]) {
+    let sum = 0; for (const g of groups) sum += g.tot ? g.n[i] / g.tot : 0;
+    ref[i] = sum / groups.length;
+  }
+
+  const ch = _scatCh();
+  const series = groups.map(g => ({ name: g.name, nImg: g.nImg, bins: [], kept: 0, tot: g.tot }));
+  let maxCells = 0;
+  for (let k = 0; k < NT; k++) {
+    let refSum = 0, cells = 0;
+    const w = new Float64Array(NE);
+    for (let e = 0; e < NE; e++) { const i = e * NT + k; if (shared[i] && ref[i] > 0) { w[e] = ref[i]; refSum += w[e]; cells++; } }
+    if (cells > maxCells) maxCells = cells;
+    if (!refSum) { series.forEach(sv => sv.bins.push(null)); continue; }
+    groups.forEach((g, gi) => {
+      let acc = 0, wsum = 0, nsky = 0;
+      for (let e = 0; e < NE; e++) {
+        const i = e * NT + k; if (!w[e] || !g.n[i]) continue;
+        acc += w[e] * scatValFromRGB(g.R[i] / g.n[i], g.G[i] / g.n[i], g.B[i] / g.n[i], ch);
+        wsum += w[e]; nsky += g.n[i];
+      }
+      if (!wsum) { series[gi].bins.push(null); return; }
+      series[gi].kept += nsky;
+      series[gi].bins.push({ lo: k * meta.bin, hi: Math.min(180, (k + 1) * meta.bin),
+                             v: acc / wsum, cells, n: nsky });
+    });
+  }
+  series.forEach(sv => { sv.cover = sv.tot ? sv.kept / sv.tot : 0; });
+  const covers = series.map(sv => sv.cover);
+  return { series, binW: meta.bin, thetaMax: Math.min(180, NT * meta.bin), maxCells,
+           coverMin: Math.min(...covers), coverMax: Math.max(...covers), nGroups: groups.length };
+}
+
+function _stdUnavailable(ctx, W, H, why) {
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif';
+  ctx.fillText('Cannot standardise for solar geometry.', 12, 30);
+  ctx.font = '11px sans-serif';
+  ctx.fillText(why === 'one-group'
+    ? 'Standardisation compares groups against a shared reference — it needs at least two groups.'
+    : 'Needs the Θ × elevation grid. Tick “scattering-angle bins” in the 360° panel and re-run.', 12, 50);
+  ctx.fillText('Untick the box to see the raw curve.', 12, 68);
+}
+
+function drawScatPhaseStd(ctx, W, H) {
+  const S = dsScatStandardised();
+  if (!S) return _stdUnavailable(ctx, W, H, 'no-grid');
+  if (S.insufficient) return _stdUnavailable(ctx, W, H, S.insufficient);
+  const ch = _scatCh(), series = S.series;
+  let y0 = Infinity, y1 = -Infinity;
+  series.forEach(sv => sv.bins.forEach(b => { if (!b) return; if (b.v < y0) y0 = b.v; if (b.v > y1) y1 = b.v; }));
+  if (!isFinite(y0)) return _stdUnavailable(ctx, W, H, 'no-grid');
+  if (y1 - y0 < 1e-6) { y0 -= 1; y1 += 1; }
+  const pad = (y1 - y0) * 0.12; y0 -= pad; y1 += pad;
+
+  ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif';
+  ctx.fillText('Phase curve — ' + scatChLabel(ch) + ' against Θ · standardised for solar geometry', 8, 14);
+  _vizSub(ctx, 'every group re-weighted to one shared Θ × elevation composition · common support holds '
+    + Math.round(S.coverMin * 100) + '–' + Math.round(S.coverMax * 100) + '% of each group\'s sky'
+    + ' · hollow markers = fewer than 2 shared elevation cells, indicative only');
+
+  const mL = 54, mT = 44, mR = 172, mB = 68;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const X = v => mL + (v / S.thetaMax) * plotW, Y = v => mT + (1 - (v - y0) / ((y1 - y0) || 1)) * plotH;
+
+  ctx.strokeStyle = '#eef3f6'; ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+  for (let i = 0; i <= 5; i++) {
+    const v = y0 + (y1 - y0) * i / 5, y = Math.round(Y(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL + plotW, y); ctx.stroke();
+    ctx.fillText((Math.round(v * 100) / 100) + '', mL - 6, y + 3);
+  }
+  ctx.textAlign = 'left';
+  if (y0 < 0 && y1 > 0) { const yz = Math.round(Y(0)) + 0.5;
+    ctx.strokeStyle = '#c9d6de'; ctx.setLineDash([4, 3]); ctx.beginPath();
+    ctx.moveTo(mL, yz); ctx.lineTo(mL + plotW, yz); ctx.stroke(); ctx.setLineDash([]); }
+
+  const wMax = Math.max(1, ...series.flatMap(sv => sv.bins.filter(Boolean).map(b => b.n)));
+  series.forEach((sv, i) => {
+    const col = SCAT_SERIES_COLS[i % SCAT_SERIES_COLS.length];
+    ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.beginPath();
+    let pen = false;
+    sv.bins.forEach(b => {
+      if (!b) { pen = false; return; }
+      const x = X((b.lo + b.hi) / 2), y = Y(b.v);
+      if (pen) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      pen = true;
+    });
+    ctx.stroke();
+    sv.bins.forEach(b => {
+      if (!b) return;
+      const x = X((b.lo + b.hi) / 2), y = Y(b.v), rad = 1.5 + 4 * Math.sqrt(b.n / wMax);
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, 2 * Math.PI);
+      if (b.cells >= 2) { ctx.fillStyle = col; ctx.fill(); }
+      else { ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.stroke(); }
+    });
+    ctx.fillStyle = col; ctx.fillRect(mL + plotW + 14, mT + 4 + i * 26, 9, 9);
+    ctx.fillStyle = '#1a2332'; ctx.font = '10px sans-serif';
+    ctx.fillText(sv.name + ' (' + sv.nImg + ')', mL + plotW + 27, mT + 12 + i * 26);
+    ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
+    ctx.fillText(Math.round(sv.cover * 100) + '% of its sky kept', mL + plotW + 27, mT + 23 + i * 26);
+  });
+
+  ctx.strokeStyle = '#dde8ed'; ctx.lineWidth = 1; ctx.strokeRect(mL, mT, plotW, plotH);
+  drawThetaAxis(ctx, mL, mT, plotW, plotH, S.thetaMax);
+  ctx.save(); ctx.translate(16, mT + plotH / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif';
+  ctx.fillText(scatChLabel(ch) + ' (standardised)', 0, 0); ctx.restore(); ctx.textAlign = 'left';
+
+  // How many elevation cells the standardisation actually had to work with, per Θ bin.
+  // Where this is 1, the "standardised" value is resting on a single cell — say so.
+  const sy = mT + plotH + 34, ref = series[0];
+  ctx.fillStyle = 'rgba(44,95,122,.45)';
+  ref.bins.forEach(b => {
+    if (!b) return;
+    const x0 = X(b.lo), x1 = X(b.hi), h = 10 * (b.cells / (S.maxCells || 1));
+    ctx.fillRect(x0, sy + 10 - h, Math.max(1, x1 - x0 - 1), h);
+  });
+  ctx.fillStyle = '#6b7a8d'; ctx.font = '8px sans-serif';
+  ctx.fillText('shared elevation cells per Θ bin (max ' + S.maxCells + ')', mL, sy + 19);
+}
 
 /* ══════════ SUN-CENTRED DATASET COMPOSITE ══════════
    The per-frame sun-centred view lives in SunSync; this is its dataset form. Radius
