@@ -83,7 +83,11 @@
     .page-header p  { font-size: 0.78rem; opacity: 0.72; margin-top: 2px; }
 
     /* ── Layout ──────────────────────────────────────────────── */
-    .page-body { max-width: 1180px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    .page-body { max-width: 1320px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    /* The dataset visualization breaks out of the reading column: prose wants a narrow
+       measure, a sun-centred composite or a Θ × elevation grid wants the screen. */
+    .viz-wide { width: min(97vw, 1800px); max-width: none; margin-left: 50%; transform: translateX(-50%); }
+    @media(max-width:1000px){ .viz-wide { width: 100%; margin-left: 0; transform: none; } }
     .cfg-sec > summary { list-style: none; }
     .cfg-sec > summary::-webkit-details-marker { display: none; }
     .cfg-sec > summary::before { content: '\25B6 '; font-size: 0.65rem; opacity: 0.6; }
@@ -399,7 +403,8 @@
     .hist-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
     .hist-canvas {
       width: 100%;
-      max-width: 990px;
+      max-width: none;
+      height: auto;
       border: 1px solid var(--border);
       border-radius: 4px;
       background: var(--bg-white);
@@ -2858,7 +2863,7 @@ function renderResults(cards, total, ok, failed, opts) {
       </div>
     </div>
     <div class="tabpane" data-tab="viz" style="display:none">
-      <div class="card" style="padding:0.8rem 1rem 1rem">
+      <div class="card viz-wide" style="padding:0.8rem 1rem 1rem">
         <div class="card-title" style="margin-bottom:0.55rem">Dataset visualization — all ${ok} analyzed images</div>
         <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">
           <select id="dsSel" class="proj-sel" onchange="showDatasetViz(this.value)">
@@ -2883,9 +2888,7 @@ function renderResults(cards, total, ok, failed, opts) {
           </select>
           <select id="rampSel" class="proj-sel" onchange="setRamp(this.value)" title="Colour ramp used for all metric heatmaps (per-image and dataset)">
             <option value="auto" ${((window._vizRampState && window._vizRampState.name) || 'auto') === 'auto' ? 'selected' : ''}>Ramp: Auto</option>
-            <option value="viridis" ${(window._vizRampState || {}).name === 'viridis' ? 'selected' : ''}>Ramp: Viridis (sequential)</option>
-            <option value="cividis" ${(window._vizRampState || {}).name === 'cividis' ? 'selected' : ''}>Ramp: Cividis (CVD-safe)</option>
-            <option value="divergingBY" ${(window._vizRampState || {}).name === 'divergingBY' ? 'selected' : ''}>Ramp: Diverging blue↔yellow</option>
+            ${rampOptionsHtml()}
           </select>
           <div id="dsctl"></div>
           <button class="btn btn-outline btn-sm" onclick="downloadDatasetPNG()">⬇ PNG</button>
@@ -2964,7 +2967,9 @@ function showDatasetViz(kind) {
       '<span style="font-size:0.72rem">points:</span> <select style="font-size:0.72rem" onchange="setDsChromaLevel(this.value)">' +
       [['image', 'image means'], ['cluster', 'all clusters']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaLevel || 'image') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') +
       '</select> <span style="font-size:0.72rem;margin-left:.4rem">colour by:</span> <select style="font-size:0.72rem" onchange="setDsChromaColour(this.value)">' +
-      [['date', 'capture date'], ['none', 'single colour']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaColour || 'date') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>';
+      [['date', 'capture date'], ['none', 'single colour']].map(o => `<option value="${o[0]}" ${(window._dsState.chromaColour || 'date') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + '</select>'
+      + '<label style="font-size:0.72rem;margin-left:.55rem;cursor:pointer" title="Fill the horseshoe with the colour each chromaticity approximately is. Everything outside the dashed sRGB triangle cannot be shown correctly and is desaturated toward the gamut boundary — indicative only. Off by default so the figure makes no colour claim it cannot support.">'
+      + '<input type="checkbox" ' + (_chromaFill() ? 'checked ' : '') + 'onchange="setChromaFill(this.checked)" style="vertical-align:-1px"> colour-fill the gamut</label>';
     else if (kind === 'dssunc') {
       const D = dsSuncCells(_scatCh(), _suncMeasure());
       const gsel = D ? '<span style="font-size:0.72rem;margin-left:.4rem">group:</span> <select style="font-size:0.72rem" onchange="window._dsState.suncGroup=this.value;drawDatasetViz()">'
@@ -3004,7 +3009,49 @@ function setDsChannel(ch) { window._dsState.channel = ch; drawDatasetViz(); }
 function setDsMetric(mk) { window._dsState.metric = mk; drawDatasetViz(); }
 function setDsChromaLevel(v) { window._dsState.chromaLevel = v; drawDatasetViz(); }
 function setDsChromaColour(v) { window._dsState.chromaColour = v; drawDatasetViz(); }
-function drawDatasetViz() { const cv = dsCanvas(); if (cv) renderDatasetViz(cv.getContext('2d'), cv.width, cv.height); }
+/* ══════════ RESPONSIVE CANVAS SIZING (new in v12) ══════════
+   The canvas used to be a fixed 990×360 with a CSS cap at 990px, which left the
+   sun-centred composite a 292px disk — the view is square, so it was height-bound and
+   most of the wide canvas went to whitespace. Backing-store width now follows the
+   panel, and each view declares the height its geometry actually needs: square views
+   get a tall box, profiles stay short. */
+const VIZ_H_DS = {
+  dssunc: 760, dschroma: 700, dsschema: 660, dsscat2d: 620,
+  dsgrid: 580, dsvar: 580, dsclust: 580,
+  dsscat: 520, dsphase: 520, dselev: 470, dsazim: 470,
+  dsstrip: 380, palette: 300, hist: 430, dist: 430
+};
+const VIZ_H_IMG = {
+  chroma: 700, original: 580, cluster: 580, grid: 580, gridheat: 580,
+  profiles: 470, palette: 310, hist: 430
+};
+function _vizSizeCanvas(cv, h) {
+  if (!cv) return;
+  // border-box + a few px of hysteresis: without both, each redraw measured a parent
+  // that the 1px border had already shrunk, and the canvas ratcheted 2px narrower
+  // every time the view was switched.
+  cv.style.boxSizing = 'border-box';
+  const par = cv.parentElement;
+  const avail = par ? par.clientWidth : 0;
+  const w = Math.max(760, Math.round(avail || cv.width));
+  if (Math.abs(cv.width - w) > 3 || cv.height !== h) { cv.width = w; cv.height = h; }
+  cv.style.width = '100%'; cv.style.height = 'auto';
+}
+function drawDatasetViz() {
+  const cv = dsCanvas(); if (!cv) return;
+  _vizSizeCanvas(cv, VIZ_H_DS[(window._dsState || {}).kind] || 430);
+  renderDatasetViz(cv.getContext('2d'), cv.width, cv.height);
+  // ramp-free views never call setRampCtx, so nothing else would refresh the selector
+  // and it would stay visible on views that ignore it entirely.
+  try { syncRampUI(); } catch (e) {}
+}
+window.addEventListener('resize', () => {
+  clearTimeout(window._vizResizeT);
+  window._vizResizeT = setTimeout(() => {
+    try { drawDatasetViz(); } catch (e) {}
+    try { redrawAllViz(); } catch (e) {}
+  }, 160);
+});
 function aggregatePalette() {
   const agg = {};
   for (const r of (window._results || [])) for (const c of (r.clusters || [])) {
@@ -3111,6 +3158,13 @@ function dsSpatialControlsHtml(kind) {
   const lab = (t, sel) => `<span style="${fs}">${t}</span> ${sel}`;
   const parts = [];
   if (kind === 'dsgrid') { parts.push(lab('channel:', chSel), lab('measure:', measSel), lab('geom:', geomSel)); }
+  else if (kind === 'dsclust') {
+    parts.push(lab('weight:', mk('setClustWeight', s.clustWeight || 'weighted',
+      [['weighted', 'by cluster size'], ['count', 'centroid count']])));
+    parts.push(lab('scale:', mk('setClustScale', s.clustScale || 'log',
+      [['log', 'log'], ['p99', '99th-pct clip'], ['linear', 'linear (raw)']])));
+    parts.push(lab('geom:', geomSel));
+  }
   else if (kind === 'dselev' || kind === 'dsazim') { parts.push(lab('measure:', mk('setDsGridMeasure', s.gridMeasure || 'mean', [['mean', 'mean colour'], ['median', 'median colour']])), lab('geom:', geomSel)); }
   parts.push(lab('extent:', eSel), lab('vert:', vSel), lab('azimuth:', hSel));
   return parts.join(' ');
@@ -3202,7 +3256,7 @@ function dsSpatialData() {
   if (valign === 'mask' || _dsExtent() === 'band') DY = Math.max(2, Math.min(DY, Math.round(DY * BAND.span)));  // one target row per occupied source row — otherwise the remap skips bins
   const HM = (halign === 'north' || halign === 'sun') ? _headingMap() : {};
   const N = DX * DY;
-  const sum = new Float64Array(N), sum2 = new Float64Array(N), cnt = new Float64Array(N), dens = new Float64Array(N);
+  const sum = new Float64Array(N), sum2 = new Float64Array(N), cnt = new Float64Array(N), dens = new Float64Array(N), densN = new Float64Array(N);
   let aligned = 0, total = 0;
   for (const r of res) {
     const g = r.spatial.grid, GX = r.spatial.gridX, GY = r.spatial.gridY;
@@ -3222,10 +3276,12 @@ function dsSpatialData() {
       if (c.centroid_x_rel == null) continue;
       let fx = c.centroid_x_rel + shift; fx = ((fx % 1) + 1) % 1;
       let fy = c.centroid_y_rel; fy = _fyAdj(fy, valign, yLo, yRange, BAND); fy = Math.min(0.999, Math.max(0, fy));
-      dens[Math.min(DY - 1, Math.floor(fy * DY)) * DX + Math.min(DX - 1, Math.floor(fx * DX))] += (c.weighted_count != null ? c.weighted_count : c.pixel_count);
+      const ci = Math.min(DY - 1, Math.floor(fy * DY)) * DX + Math.min(DX - 1, Math.floor(fx * DX));
+      dens[ci] += (c.weighted_count != null ? c.weighted_count : c.pixel_count);
+      densN[ci] += 1;   // unweighted: how many centroids landed here, regardless of cluster size
     }
   }
-  return { DX, DY, sum, sum2, cnt, dens, ch, valign, halign, aligned, total, nImg: res.length };
+  return { DX, DY, sum, sum2, cnt, dens, densN, ch, valign, halign, aligned, total, nImg: res.length };
 }
 function drawRampLegend(ctx, x, y, h, vmin, vmax) {
   const w = 12, steps = 40;
@@ -3409,6 +3465,54 @@ function drawPolarField(ctx, W, H, DX, DY, colFn, centreLabel, rimLabel) {
   ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(centreLabel || '0°', cx, cy + 3); ctx.fillText(rimLabel || 'edge', cx, cy - Rmax - 4); ctx.textAlign = 'left';
 }
+/* ══════════ CLUSTER-CENTROID DENSITY — scaling and honesty (new in v13) ══════════
+   This view bins each image's k-means cluster centroids onto the bearing × elevation
+   grid. Two things made it unreadable and one makes it easy to over-read:
+
+   (1) Dynamic range. On the 8 Aug Evening set one cell held 28049 against a floor of
+       55 — a 500× spread on a linear ramp, so that single cell took the whole scale and
+       every other cell flattened to the bottom colour. Hence the scale modes below;
+       99th-percentile clipping is the default because it is the one that makes the
+       structure underneath visible without transforming the numbers.
+   (2) Size weighting. Weighting by cluster pixel count means the largest cluster
+       dominates by construction. The unweighted mode answers the different and often
+       more useful question: where do centroids land at all?
+   (3) A centroid only describes a COMPACT cluster. One covering most of the sky sits at
+       the middle of its extent, which describes nothing real; and because azimuth
+       wraps, a cluster spanning north (350°–10°) produces a centroid at SOUTH. That is
+       an artefact of the coordinate, not a measurement, so it is printed on the figure.
+
+   Not a paper figure — the sun-centred composite and the Θ views do cross-dataset
+   comparison properly. This is a diagnostic, and it now says so. */
+function _clustWeight() { return (window._dsState && window._dsState.clustWeight) || 'weighted'; }
+function setClustWeight(v) { window._dsState.clustWeight = v; drawDatasetViz(); }
+function _clustScale() { return (window._dsState && window._dsState.clustScale) || 'log'; }
+function setClustScale(v) { window._dsState.clustScale = v; drawDatasetViz(); }
+
+/* Rescales `field` in place and reports what it did, so the caption can never imply a
+   raw count when the ramp is showing something else. */
+function _clustRescale(field) {
+  const vals = [];
+  for (let i = 0; i < field.length; i++) if (!isNaN(field[i])) vals.push(field[i]);
+  if (!vals.length) return { note: '', unit: '' };
+  vals.sort((a, b) => a - b);
+  const max = vals[vals.length - 1], mode = _clustScale();
+  if (mode === 'log') {
+    for (let i = 0; i < field.length; i++) if (!isNaN(field[i])) field[i] = Math.log10(1 + field[i]);
+    return { note: 'log₁₀(1+n) scale — raw max ' + Math.round(max).toLocaleString(), unit: 'log₁₀(1+n)' };
+  }
+  if (mode === 'p99') {
+    const cut = vals[Math.min(vals.length - 1, Math.floor(0.99 * (vals.length - 1)))];
+    let clipped = 0;
+    for (let i = 0; i < field.length; i++) if (!isNaN(field[i]) && field[i] > cut) { field[i] = cut; clipped++; }
+    if (!clipped) return { note: 'the 99th percentile clipped nothing — only ' + vals.length
+      + ' occupied cell' + (vals.length > 1 ? 's' : '') + ', too few for percentile scaling to bite; use log', unit: 'raw' };
+    return { note: 'clipped at the 99th percentile (' + Math.round(cut).toLocaleString() + ') — '
+                 + clipped + ' cell' + (clipped > 1 ? 's' : '') + ' above it drawn at full scale, raw max '
+                 + Math.round(max).toLocaleString(), unit: 'clipped' };
+  }
+  return { note: 'linear — one dominant cell can flatten the rest', unit: 'raw' };
+}
 function renderDatasetSpatial(ctx, W, H) {
   const st = window._dsState, kind = st.kind, d = dsSpatialData();
   if (!d) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('Enable Spatial structure, then analyze images, to build dataset composites.', 10, 24); return; }
@@ -3417,7 +3521,15 @@ function renderDatasetSpatial(ctx, W, H) {
   const polar = _geomIsPolar();
   if (kind === 'dsgrid' || kind === 'dsclust') {
     let DXg, DYg, field, title;
-    if (kind === 'dsclust') { DXg = DX; DYg = DY; field = new Float64Array(DX * DY).fill(NaN); for (let i = 0; i < DX * DY; i++) if (dens[i]) field[i] = dens[i]; title = 'Cluster-centroid density'; }
+    let clustNote = null;
+    if (kind === 'dsclust') {
+      DXg = DX; DYg = DY;
+      const src = _clustWeight() === 'count' ? d.densN : dens;
+      field = new Float64Array(DX * DY).fill(NaN);
+      for (let i = 0; i < DX * DY; i++) if (src[i]) field[i] = src[i];
+      clustNote = _clustRescale(field);
+      title = 'Cluster-centroid density';
+    }
     else {
       const A = dsCellArrays(ch, d.valign, d.halign); if (!A) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('No data', 10, 40); return; }
       DXg = A.DX; DYg = A.DY; const meas = st.gridMeasure || 'mean'; field = dsFieldFromArrays(A, meas);
@@ -3425,14 +3537,23 @@ function renderDatasetSpatial(ctx, W, H) {
     }
     let vmin = Infinity, vmax = -Infinity; for (let i = 0; i < field.length; i++) { const v = field[i]; if (!isNaN(v)) { if (v < vmin) vmin = v; if (v > vmax) vmax = v; } }
     if (!isFinite(vmin)) { ctx.fillStyle = '#6b7a8d'; ctx.font = '12px sans-serif'; ctx.fillText('No data', 10, 40); return; }
-    setRampCtx(ch, vmin, vmax, st.gridMeasure || 'mean');
+    setRampCtx(ch, vmin, vmax, kind === 'dsclust' ? 'count' : (st.gridMeasure || 'mean'));
     if (rampIsDiverging()) { const m = Math.max(Math.abs(vmin), Math.abs(vmax)); vmin = -m; vmax = m; }
     ctx.fillStyle = '#1a2332'; ctx.font = '600 12px sans-serif'; ctx.fillText(`${title} — ${d.nImg} images`, 8, 13);
-    _vizSub(ctx, `${dsChanLabel(ch)} · ${kind === 'dsclust' ? 'centroid density' : (st.gridMeasure || 'mean')} · V:${d.valign} H:${d.halign}${d.halign !== 'none' ? ` (${d.aligned}/${d.total})` : ''} · ${polar ? 'polar' : 'rectangular'}`);
+    if (kind === 'dsclust') {
+      _vizSub(ctx, `${_clustWeight() === 'count' ? 'centroid count (unweighted)' : 'centroid density (weighted by cluster size)'}`
+        + ` · ${clustNote.note} · V:${d.valign} H:${d.halign} · ${polar ? 'polar' : 'rectangular'}`);
+      ctx.fillStyle = '#a8792c'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText('Diagnostic only: a centroid describes a compact cluster. One spanning the sky sits at the middle of its extent, '
+        + 'and because azimuth wraps, one spanning north lands at south.', 8, 38);
+    } else {
+      _vizSub(ctx, `${dsChanLabel(ch)} · ${st.gridMeasure || 'mean'} · V:${d.valign} H:${d.halign}${d.halign !== 'none' ? ` (${d.aligned}/${d.total})` : ''} · ${polar ? 'polar' : 'rectangular'}`);
+    }
     const colFn = (wx, ry) => { const v = field[ry * DXg + wx]; return isNaN(v) ? null : vizRamp((v - vmin) / ((vmax - vmin) || 1)); };
     if (polar) { const pe = _polarEnds((window._results[0] || {}).proj); drawPolarField(ctx, W - 44, H, DXg, DYg, colFn, pe[0], pe[1]); drawRampLegend(ctx, W - 40, 24, H - 48, vmin, vmax); }
     else {
-      const mL = 46, mT = 34, mR = 60, mB = 40, plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / DXg, chh = plotH / DYg;
+      const mL = 46, mT = kind === 'dsclust' ? 50 : 34, mR = 60, mB = 40,   // dsclust carries an extra caveat line above the plot
+            plotW = W - mL - mR, plotH = H - mT - mB, cw = plotW / DXg, chh = plotH / DYg;
       for (let y = 0; y < DYg; y++) for (let x = 0; x < DXg; x++) { const c = colFn(x, y); if (!c) continue; ctx.fillStyle = c; ctx.fillRect(mL + x * cw, mT + y * chh, Math.ceil(cw), Math.ceil(chh)); }
       ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(mL, mT, plotW, plotH);
       drawAzimAxis(ctx, mL, mT, plotW, plotH, _dsRegistered(), 360,
@@ -3865,10 +3986,16 @@ function drawSuncComposite(ctx, W, H) {
   _vizSub(ctx, D.group + ' · ' + D.nImg + ' frame(s) · radius = Θ, angle = rotation about the sun'
     + (colourMode ? '' : ' · ramp: ' + rampAutoWhy()));
 
-  const mT = 42, mR = colourMode ? 16 : 74, mB = 26;
-  const legendW = 250;                       // the wide short canvas leaves room to explain φ
-  const size = Math.min(W - 16 - mR - legendW, H - mT - mB);
-  const R = size / 2 - 16, cx = 8 + size / 2, cy = mT + size / 2;
+  // v12 layout: title, subtitle and the reading guide occupy a fixed left column;
+  // the disk takes everything left over on the right, so it grows with the window
+  // instead of being pinned to a short canvas.
+  const mT = 46, mB = 26;
+  const legendW = 300;
+  const rampW = colourMode ? 16 : 74;        // ramp legend sits to the RIGHT of the disk
+  const availW = W - legendW - 24 - rampW;
+  const size = Math.min(availW, H - mT - mB);
+  const diskX = legendW + 16 + Math.max(0, (availW - size) / 2);   // centre when height-bound
+  const R = size / 2 - 16, cx = diskX + size / 2, cy = mT + size / 2;
   const TMAX = 180;
   const A0 = ph => -(ph) * Math.PI / 180;   // φ=0 to the right, φ=90 upward (canvas y is inverted)
 
@@ -3918,10 +4045,10 @@ function drawSuncComposite(ctx, W, H) {
   ctx.fillStyle = '#e8a33d'; ctx.beginPath(); ctx.arc(cx, cy, 5, 0, 2 * Math.PI); ctx.fill();
   _haloText(ctx, 'sun', cx - 16, cy + 4, '#e8a33d');
   ctx.textAlign = 'left';
-  if (!colourMode) drawRampLegend(ctx, 8 + size + 10, mT + 6, size - 30, vmin, vmax);
+  if (!colourMode) drawRampLegend(ctx, diskX + size + 10, mT + 6, size - 30, vmin, vmax);
 
-  // side legend — there is room, and φ needs saying in words
-  const lx = W - legendW + 6;
+  // reading guide — now the LEFT column, under the title
+  const lx = 8;
   let ly = mT + 6;
   const line = (t, bold, col) => {
     ctx.fillStyle = col || (bold ? '#1a2332' : '#6b7a8d');
@@ -4454,22 +4581,46 @@ function drawVizOriginal(ctx, W, H, r) {
 }
 function drawViz(id) {
   const r = recById(id), cv = vizCanvas(id); if (!r || !cv) return;
-  renderViz(cv.getContext('2d'), cv.width, cv.height, r, window._vizState[id] || { kind: 'palette' });
+  const st = window._vizState[id] || { kind: 'palette' };
+  _vizSizeCanvas(cv, VIZ_H_IMG[st.kind] || 430);
+  renderViz(cv.getContext('2d'), cv.width, cv.height, r, st);
 }
 // Colour ramps for metric heatmaps — sequential (viridis, cividis) and diverging (blue↔yellow, for b*-style axes)
 const RAMP_STOPS = {
   viridis:    [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]],
   cividis:    [[0, 32, 76], [85, 91, 108], [150, 150, 141], [221, 179, 92], [255, 234, 70]],
+  magma:      [[0, 0, 4], [81, 18, 124], [183, 55, 121], [252, 137, 97], [252, 253, 191]],
+  inferno:    [[0, 0, 4], [87, 16, 110], [188, 55, 84], [249, 142, 9], [252, 255, 164]],
+  plasma:     [[13, 8, 135], [126, 3, 168], [204, 71, 120], [248, 149, 64], [240, 249, 33]],
+  mako:       [[11, 4, 14], [52, 50, 105], [54, 113, 148], [86, 177, 163], [222, 245, 229]],
   divergingBY: [[33, 90, 170], [146, 197, 222], [247, 247, 247], [253, 219, 143], [220, 150, 10]],
+  divergingRB: [[5, 113, 176], [146, 197, 222], [247, 247, 247], [244, 165, 130], [202, 0, 32]],
+  divergingBT: [[1, 133, 113], [128, 205, 193], [245, 245, 245], [223, 194, 125], [166, 97, 26]],
+  divergingPO: [[94, 60, 153], [178, 171, 210], [247, 247, 247], [253, 184, 99], [230, 97, 1]],
 };
-const RAMP_DIVERGING = new Set(['divergingBY']);
+/* Every diverging ramp runs cool -> neutral -> warm, so "high is warm" reads the same
+   way whichever is chosen. Blue-yellow is kept as the default but collides visually
+   with the b* blue-yellow axis it is often drawn on; red-blue avoids that. */
+const RAMP_DIVERGING = new Set(['divergingBY', 'divergingRB', 'divergingBT', 'divergingPO']);
+const RAMP_SEQ_OPTS = [['viridis', 'Viridis'], ['cividis', 'Cividis (CVD-safe)'], ['magma', 'Magma'],
+                       ['inferno', 'Inferno'], ['plasma', 'Plasma'], ['mako', 'Mako']];
+const RAMP_DIV_OPTS = [['divergingBY', 'Blue ↔ Yellow'], ['divergingRB', 'Red ↔ Blue'],
+                       ['divergingBT', 'Teal ↔ Brown'], ['divergingPO', 'Purple ↔ Orange']];
+/* Declared as a function so it is hoisted — the results shell may render before the
+   consts above are evaluated. (See the D2R temporal-dead-zone bug fixed in v10.) */
+function rampOptionsHtml() {
+  const cur = (window._vizRampState || {}).name;
+  const opt = ([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`;
+  return '<optgroup label="Sequential (perceptually uniform)">' + RAMP_SEQ_OPTS.map(opt).join('')
+       + '</optgroup><optgroup label="Diverging (signed metrics only)">' + RAMP_DIV_OPTS.map(opt).join('') + '</optgroup>';
+}
 /* Which quantities have a meaningful zero. A diverging ramp says "this value sits
    above or below a natural midpoint"; on a magnitude like L* or chroma there is no
    such midpoint and the claim is false. Signedness depends on the measure as well as
    the channel: an SD is never signed, a local Moran's I always is. */
 const RAMP_SIGNED_CH = new Set(['a', 'b', 'red']);
 function metricIsSigned(ch, measure) {
-  if (measure === 'sd') return false;
+  if (measure === 'sd' || measure === 'count') return false;   // counts have no meaningful zero to diverge about
   if (measure === 'lisa') return true;
   return RAMP_SIGNED_CH.has(ch);
 }
@@ -4516,7 +4667,8 @@ function syncRampUI() {
   const rampUnused = ['dsphase', 'dsstrip', 'dsschema', 'palette', 'dschroma', 'hist'].includes(kind)
     || (kind === 'dssunc' && _suncMeasure() === 'colour');
   sel.disabled = rampUnused;
-  sel.style.opacity = rampUnused ? 0.45 : 1;
+  sel.style.display = rampUnused ? 'none' : '';   // removed outright, not greyed
+  sel.style.opacity = 1;
   if (rampUnused) { sel.title = 'This view draws measured colour or per-dataset series — no ramp is used.'; return; }
   Array.from(sel.options).forEach(o => {
     if (RAMP_DIVERGING.has(o.value)) {
@@ -4650,16 +4802,85 @@ function drawVizProfiles(ctx, W, H, r) {
   ctx.fillText('columns →', mL, mT + half - 5);
   drawElevAxis(ctx, mL, mT + half, half - 4, _elevAt(r.proj, rA / srcH), _elevAt(r.proj, (rB + 1) / srcH), 'elevation');
 }
+/* ══════════ CHROMATICITY GAMUT FILL (new in v12) ══════════
+   Off by default, and that default is the defensible one: most of the spectral
+   horseshoe lies OUTSIDE sRGB and cannot be shown correctly on any ordinary display.
+   Filling it means every colour beyond the dashed triangle is an approximation —
+   here, desaturated toward the gamut boundary. Useful for a talk or a general
+   audience, misleading if a reader takes the fill as measured colour. The flat-grey
+   default makes no claim at all. Say which one a published figure used. */
+function _chromaFill() { return !!(window._vizRampState && window._vizRampState.chromaFill); }
+function setChromaFill(v) {
+  window._vizRampState = window._vizRampState || {};
+  window._vizRampState.chromaFill = !!v;
+  window._chromaGamutCache = null;
+  drawDatasetViz(); redrawAllViz();
+}
+let _sRgbGammaLut = null;
+function _gammaLut() {
+  if (_sRgbGammaLut) return _sRgbGammaLut;
+  const N = 2048, t = new Uint8Array(N + 1);
+  for (let i = 0; i <= N; i++) {
+    const c = i / N;
+    t[i] = Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
+  }
+  return (_sRgbGammaLut = t);
+}
+/* Raster the horseshoe interior, then mask it to the locus with destination-in.
+   Cached on size, because the field only depends on the plot geometry. */
+function _paintChromaGamut(ctx, F) {
+  const x0 = Math.round(F.mL), y0 = Math.round(F.mT);
+  const w = Math.round(F.plotW), h = Math.round(F.plotH);
+  if (w <= 1 || h <= 1) return;
+  const cache = window._chromaGamutCache;
+  if (cache && cache.w === w && cache.h === h) { ctx.drawImage(cache.cv, x0, y0); return; }
+  const off = document.createElement('canvas'); off.width = w; off.height = h;
+  const octx = off.getContext('2d'), img = octx.createImageData(w, h), d = img.data, L = _gammaLut(), N = 2048;
+  for (let j = 0; j < h; j++) {
+    const v = F.vy(y0 + j + 0.5);
+    for (let i = 0; i < w; i++) {
+      const u = F.ux(x0 + i + 0.5);
+      const den = 6 * u - 16 * v + 12;
+      if (den <= 0) continue;
+      const x = 9 * u / den, y = 4 * v / den;
+      if (y <= 1e-6) continue;
+      const X = x / y, Z = (1 - x - y) / y;
+      let R = 3.2406 * X - 1.5372 - 0.4986 * Z;
+      let G = -0.9689 * X + 1.8758 + 0.0415 * Z;
+      let B = 0.0557 * X - 0.2040 + 1.0570 * Z;
+      const mn = R < G ? (R < B ? R : B) : (G < B ? G : B);
+      if (mn < 0) { R -= mn; G -= mn; B -= mn; }              // desaturate toward the gamut
+      const mx = R > G ? (R > B ? R : B) : (G > B ? G : B);
+      if (mx > 1e-9) { R /= mx; G /= mx; B /= mx; } else continue;
+      const k = (j * w + i) * 4;
+      d[k] = L[(R * N) | 0]; d[k + 1] = L[(G * N) | 0]; d[k + 2] = L[(B * N) | 0]; d[k + 3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  octx.globalCompositeOperation = 'destination-in';
+  octx.beginPath();
+  SPECTRAL_LOCUS_XY.forEach(([wl, x, y], i) => {
+    const [u, v] = xyToUV(x, y), px = F.px(u) - x0, py = F.py(v) - y0;
+    i === 0 ? octx.moveTo(px, py) : octx.lineTo(px, py);
+  });
+  octx.closePath(); octx.fillStyle = '#000'; octx.fill();
+  window._chromaGamutCache = { w, h, cv: off };
+  ctx.drawImage(off, x0, y0);
+}
 /* ── CIE 1976 u'v' chromaticity plot: spectral locus, sRGB gamut, Planckian locus + points ── */
 function _chromaFrame(W, H) {
-  const mL = 44, mT = 10, mR = 14, mB = 30;
-  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const mL0 = 44, mT = 10, mR = 14, mB = 30;
+  const availW = W - mL0 - mR, availH = H - mT - mB;
   // u' spans roughly 0-0.62, v' roughly 0-0.6 for the full horseshoe; fit with equal scale.
   const uMin = 0, uMax = 0.65, vMin = 0, vMax = 0.62;
-  const sx = plotW / (uMax - uMin), sy = plotH / (vMax - vMin);
-  const s = Math.min(sx, sy);
+  const s = Math.min(availW / (uMax - uMin), availH / (vMax - vMin));
+  // the diagram must stay square; centre it in whichever direction has slack, otherwise
+  // a wide canvas leaves it pinned to the left with the plot box drawn around empty space
+  const plotW = (uMax - uMin) * s, plotH = (vMax - vMin) * s;
+  const mL = mL0 + Math.max(0, (availW - plotW) / 2);
   const px = u => mL + (u - uMin) * s, py = v => mT + plotH - (v - vMin) * s;
-  return { mL, mT, plotW, plotH, px, py };
+  const ux = p => (p - mL) / s + uMin, vy = p => (mT + plotH - p) / s + vMin;   // inverse, for the gamut raster
+  return { mL, mT, plotW, plotH, px, py, ux, vy, s };
 }
 function _drawChromaBackground(ctx, W, H, showPlanck) {
   const F = _chromaFrame(W, H);
@@ -4668,7 +4889,8 @@ function _drawChromaBackground(ctx, W, H, showPlanck) {
   ctx.beginPath();
   SPECTRAL_LOCUS_XY.forEach(([wl, x, y], i) => { const [u, v] = xyToUV(x, y); const px = F.px(u), py = F.py(v); i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); });
   ctx.closePath();
-  ctx.fillStyle = 'rgba(120,120,120,0.06)'; ctx.fill();
+  if (_chromaFill()) _paintChromaGamut(ctx, F);
+  else { ctx.fillStyle = 'rgba(120,120,120,0.06)'; ctx.fill(); }
   ctx.strokeStyle = '#9aa7b5'; ctx.lineWidth = 1; ctx.stroke();
   // sRGB gamut triangle
   ctx.beginPath();
@@ -4694,7 +4916,7 @@ function _drawChromaBackground(ctx, W, H, showPlanck) {
   ctx.strokeStyle = '#dde8ed'; ctx.strokeRect(F.mL, F.mT, F.plotW, F.plotH);
   ctx.fillStyle = '#6b7a8d'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText("u'", F.mL + F.plotW / 2, F.mT + F.plotH + 20);
-  ctx.save(); ctx.translate(14, F.mT + F.plotH / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("v'", 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(F.mL - 30, F.mT + F.plotH / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("v'", 0, 0); ctx.restore();
   // tick marks
   ctx.font = '8px sans-serif'; ctx.fillStyle = '#8a97a4';
   for (let t = 0; t <= 0.6; t += 0.1) {
@@ -4726,7 +4948,8 @@ function drawVizChromaImage(ctx, W, H, r) {
     ctx.fillText(`mean · CCT ${m.cct ?? '—'}K · duv ${m.duv != null ? (m.duv >= 0 ? '+' : '') + m.duv.toFixed(4) : '—'}`, px + 8, py + 3);
   }
   ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('dot size = pixel share · red curve = Planckian locus · dashed = sRGB gamut', 8, H - 6);
+  ctx.fillText('dot size = pixel share · red curve = Planckian locus · dashed = sRGB gamut'
+    + (_chromaFill() ? ' · fill is approximate; colour outside the triangle is not displayable' : ''), 8, H - 6);
 }
 function drawDatasetChromaticity(ctx, W, H) {
   const st = window._dsState, level = st.chromaLevel || 'image', colourBy = st.chromaColour || 'date';
@@ -4756,7 +4979,8 @@ function drawDatasetChromaticity(ctx, W, H) {
     ctx.textAlign = 'left';
   }
   ctx.fillStyle = '#6b7a8d'; ctx.font = '9px sans-serif';
-  ctx.fillText('red curve = Planckian locus (CCT) · dashed = sRGB gamut', 8, H - 6);
+  ctx.fillText('red curve = Planckian locus (CCT) · dashed = sRGB gamut'
+    + (_chromaFill() ? ' · fill is approximate; colour outside the triangle is not displayable' : ''), 8, H - 6);
 }
 function drawVizHist(ctx, W, H, r, channel) {
   const m = r.metrics, mode = channel === 'saturation' ? 'sat' : channel === 'value' ? 'val' : 'hue';
