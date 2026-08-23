@@ -581,8 +581,18 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
   text-transform:uppercase;color:var(--text-muted)}
 #vomProjBar .pb-name{font-weight:600}
 #vomProjBar .pb-sub,#vomProjBar .pb-none{color:var(--text-muted);font-size:.76rem}
-#vomProjBar .pb-link{margin-left:auto;color:var(--primary);text-decoration:none;font-size:.78rem}
+#vomProjBar .pb-mid{flex:1 1 auto;display:flex;align-items:center;gap:.4rem;min-width:0}
+#vomProjBar .pb-link{color:var(--primary);text-decoration:none;font-size:.78rem}
 #vomProjBar .pb-link:hover{text-decoration:underline}
+/* The one control every page shares, so it looks like one rather than like the
+   end of a sentence. */
+#vomProjBar .pb-hub{flex:0 0 auto;display:inline-flex;align-items:center;gap:.32rem;
+  font-size:.78rem;text-decoration:none;padding:.22rem .6rem;border-radius:var(--radius);
+  border:1px solid var(--primary);color:var(--primary);background:var(--bg-white)}
+#vomProjBar .pb-hub:hover{background:var(--primary);color:#fff}
+#vomProjBar .pb-hub-i{font-size:.72rem;opacity:.85}
+#vomProjBar .pb-pill.mirror{background:#eef3f7;color:var(--primary);border:1px solid var(--border)}
+#vomProjBar button.pb-warn{border-color:var(--warning-border);background:var(--warning-bg);color:#7a5200}
 #vomProjBar .pb-pill{font-family:var(--vom-mono);font-size:.62rem;letter-spacing:.07em;
   text-transform:uppercase;padding:.1rem .34rem;border-radius:3px}
 #vomProjBar .pb-pill.folder{background:var(--accent-light);color:#12695c}
@@ -616,6 +626,30 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
 #vomPick .pk-foot button{font-family:var(--vom-font);font-size:.8rem;padding:.32rem .8rem;cursor:pointer;
   border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-white);color:var(--text)}
 #vomPick .pk-note{font-size:.74rem;color:var(--text-muted)}
+
+/* The split button. The tool's own button keeps its every style — only its
+   right corners are squared off so the chevron can butt against it. */
+.vom-split{display:inline-flex;align-items:stretch;vertical-align:middle;max-width:100%}
+.vom-split>[data-vom-split]{border-top-right-radius:0!important;border-bottom-right-radius:0!important;
+  margin-right:0!important}
+.vom-split-chev{display:inline-flex;align-items:center;gap:.22rem;cursor:pointer;
+  font-family:var(--vom-font);font-size:.72rem;line-height:1;padding:0 .42rem;
+  border:1px solid var(--border);border-left:0;border-radius:0 var(--radius) var(--radius) 0;
+  background:var(--bg-page);color:var(--text-muted);white-space:nowrap}
+.vom-split-chev:hover{background:var(--accent-light);color:#12695c;border-color:var(--accent)}
+.vom-split-chev i{font-style:normal;font-family:var(--vom-mono);font-size:.6rem;letter-spacing:.06em;
+  text-transform:uppercase}
+.vom-split-chev.tight i{display:none}
+@media(max-width:560px){.vom-split-chev i{display:none}}
+
+#vomSplitMenu{position:absolute;z-index:9700;min-width:220px;max-width:min(320px,92vw);
+  background:var(--bg-white);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:0 10px 30px rgba(15,28,36,.18);padding:.25rem;font-family:var(--vom-font)}
+#vomSplitMenu button{display:block;width:100%;text-align:left;border:0;background:none;cursor:pointer;
+  padding:.42rem .55rem;border-radius:4px;font-size:.82rem;color:var(--text);font-family:inherit}
+#vomSplitMenu button:hover{background:var(--bg-page)}
+#vomSplitMenu button.cur{font-weight:600}
+#vomSplitMenu button span{display:block;font-size:.72rem;color:var(--text-muted);margin-top:.1rem}
 /*__VOM_PROJBAR_END__*/
 </style>
   <script data-goatcounter="https://jcinnamon.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -5805,7 +5839,7 @@ vomWireDrop({
 
 <script>
 /*__VOM_PROJECTJS_START__ — generated from shared/vom_shared.py, do not edit here */
-var VOM_DB_NAME='vom-suite', VOM_DB_VERSION=2;
+var VOM_DB_NAME='vom-suite', VOM_DB_VERSION=3;
 var _vomDb=null;
 
 function vomDb(){
@@ -5830,6 +5864,17 @@ function vomDb(){
       if(!db.objectStoreNames.contains('runs')){
         var r=db.createObjectStore('runs',{keyPath:'id'});
         r.createIndex('projectId','projectId',{unique:false});
+      }
+      /* Dataset manifests that arrived WITHOUT their images — from an imported
+         project file. They live here rather than in the Manager's own database
+         because the hub must never so much as create that one (an empty
+         vom-viewer at version 1 would leave the Manager finding none of its
+         stores). The reader merges them in, marked pending, so an imported
+         project shows its datasets honestly: the curation is here, the pixels
+         are not. */
+      if(!db.objectStoreNames.contains('manifests')){
+        var m=db.createObjectStore('manifests',{keyPath:'id'});
+        m.createIndex('projectId','projectId',{unique:false});
       }
     };
     rq.onsuccess=function(){_vomDb=rq.result;res(_vomDb);};
@@ -5909,6 +5954,25 @@ async function vomEnsureAccess(p){
   return {ok:false,reason:'Permission to use that folder was not granted.'};
 }
 
+/* The same question WITHOUT asking. `queryPermission` needs no user gesture, so
+   this can run on load: where Chrome has kept the grant — which it increasingly
+   does for a folder you have used before — the project simply opens connected
+   and nobody has to press anything. Only when the answer is 'prompt' does a
+   click become unavoidable, and that is the only case the bar mentions it.
+   `requestPermission` is never called from here; calling it without a gesture
+   fails silently, which would look exactly like a folder that had gone away. */
+async function vomQuietAccess(p){
+  if(!p||p.store!=='folder') return {ok:p&&p.store!=='folder'};
+  var h;
+  try{ h=await vomHandleGet(p.id); }catch(e){ return {ok:false,state:'error'}; }
+  if(!h) return {ok:false,state:'forgotten',
+                 reason:'The folder for this project is not remembered any more. Re-open it to continue.'};
+  var q;
+  try{ q=await h.queryPermission({mode:'readwrite'}); }catch(e){ return {ok:false,state:'error'}; }
+  if(q==='granted') return {ok:true,handle:h,state:'granted'};
+  return {ok:false,state:q==='denied'?'denied':'prompt',handle:h};
+}
+
 /* ── Outputs and the run log ──────────────────────────────────────────────
    Two things, deliberately separate. An OUTPUT is a file a tool produced. A RUN
    is the record of producing it: which tool, which version, which dataset, what
@@ -5984,6 +6048,9 @@ async function vomLogRun(p,handle,run){
   }
   p.runs=(p.runs||0)+1; p.updated=Date.now();
   await vomProjectPut(p);
+  /* Anything that produced a run produced a file too, so this is the one hook
+     that catches every tool's output without each of them knowing about it. */
+  if(typeof vomMirrorTouch==='function') vomMirrorTouch(p);
   return rec;
 }
 
@@ -6029,6 +6096,137 @@ async function vomOutputs(p,handle){
     }
   }catch(err){}
   return list.sort(function(a,b){return (b.created||0)-(a.created||0);});
+}
+
+/* ── Duplicating a project ────────────────────────────────────────────────
+   The record and its dataset links, not the images. "Same setup, next field
+   season". A browser copy always, even of a folder project, because two
+   projects pointing at one folder would both claim to own its datasets/
+   directory and the second write would overwrite the first. */
+async function vomDuplicateProject(p){
+  if(!p) return null;
+  var copy={id:vomUid(),name:p.name+' (copy)',store:'browser',
+            created:Date.now(),updated:Date.now(),datasets:0,runs:0,
+            folderName:null,colour:p.colour||null,note:p.note||'',
+            copiedFrom:p.id};
+  await vomProjectPut(copy);
+  /* Dataset links only. The datasets themselves are shared — that is what
+     `projectIds` being a list has always meant. */
+  var db=await vomManagerDb();
+  if(db){
+    try{
+      var dss=await _vomMgrReq(db,'datasets',function(s){return s.getAll();});
+      var mine=(dss||[]).filter(function(d){return (d.projectIds||[]).indexOf(p.id)>=0;});
+      if(mine.length){
+        await new Promise(function(res,rej){
+          var tx=db.transaction('datasets','readwrite'),st=tx.objectStore('datasets');
+          mine.forEach(function(d){ d.projectIds=(d.projectIds||[]).concat(copy.id); st.put(d); });
+          tx.oncomplete=res; tx.onerror=function(){rej(tx.error);};
+        });
+      }
+    }catch(e){}
+  }
+  return copy;
+}
+
+/* ── The mirror ───────────────────────────────────────────────────────────
+   Not sync. A BROWSER project writes its light artefacts — the project record,
+   the dataset manifests, the outputs and the run log — into a folder you
+   already have OneDrive, Drive or Dropbox watching, and they carry it. No
+   server, no account, no conflict resolution here, because the folder is dumb
+   and somebody else does the hard part.
+
+   NEVER the images. Mirroring those would mean keeping every frame in browser
+   storage AND writing a second copy, which is the exact arrangement folder
+   projects exist to avoid.
+
+   ONE-WAY, and last write wins. Nothing is ever read back from a mirror, so
+   there is no question about which copy is right — the browser is always the
+   original. Two machines writing to one mirror folder will overwrite each
+   other, which is why the wording says so rather than implying sync. */
+function vomMirrorGet(id){return _vomTx('handles','readonly',function(s){return s.get('mirror:'+id);});}
+function vomMirrorPut(id,h){return _vomTx('handles','readwrite',function(s){return s.put(h,'mirror:'+id);});}
+function vomMirrorDel(id){return _vomTx('handles','readwrite',function(s){return s.delete('mirror:'+id);});}
+
+async function vomMirrorAccess(p,ask){
+  if(!p||p.store!=='browser'||!p.mirror) return {ok:false,state:'off'};
+  var h=await vomMirrorGet(p.id);
+  if(!h) return {ok:false,state:'forgotten'};
+  var q=await h.queryPermission({mode:'readwrite'});
+  if(q==='granted') return {ok:true,handle:h,state:'granted'};
+  if(!ask) return {ok:false,state:'prompt',handle:h};
+  var r=await h.requestPermission({mode:'readwrite'});
+  return r==='granted'?{ok:true,handle:h,state:'granted'}:{ok:false,state:'denied'};
+}
+
+async function vomMirrorChoose(p){
+  if(!vomCanUseFolders()) throw new Error('This browser cannot open a folder.');
+  var dir=await window.showDirectoryPicker({mode:'readwrite'});
+  await vomMirrorPut(p.id,dir);
+  p.mirror={name:dir.name,since:Date.now()};
+  await vomProjectPut(p);
+  return dir;
+}
+async function vomMirrorStop(p){
+  await vomMirrorDel(p.id);
+  delete p.mirror;
+  await vomProjectPut(p);
+}
+
+/* Everything the project knows, written flat. Cheap enough to do whole rather
+   than work out what changed — a mirror that wrote only deltas would be a
+   mirror that could be subtly out of date, which is worse than a slow one. */
+async function vomMirrorWrite(p,onProgress){
+  var a=await vomMirrorAccess(p,false);
+  if(!a.ok) return {ok:false,state:a.state};
+  var root=a.handle;
+  async function put(names,file,bytes){
+    var d=root;
+    for(var i=0;i<names.length;i++) d=await d.getDirectoryHandle(names[i],{create:true});
+    var fh=await d.getFileHandle(file,{create:true});
+    var w=await fh.createWritable();
+    await w.write(bytes);
+    await w.close();
+  }
+  var n=0;
+  await put([],'vom-project.json',JSON.stringify({
+    format:'vom-project',version:1,id:p.id,name:p.name,store:'browser (mirrored)',
+    created:new Date(p.created||Date.now()).toISOString(),
+    mirrored:new Date().toISOString(),
+    note:'A one-way copy. The original lives in the browser that wrote this; nothing here is read back.'
+  },null,2)); n++;
+
+  var ds=await vomDatasets(p,null);
+  for(var i=0;i<ds.length;i++){
+    var doc=await vomDatasetDoc(p,null,ds[i]);
+    if(!doc) continue;
+    await put(['datasets',vomSlug(ds[i].name)],'dataset.json',JSON.stringify(doc,null,2)); n++;
+    if(onProgress) onProgress(i+1,ds.length);
+  }
+  var runs=await vomRuns(p,null);
+  for(var j=0;j<runs.length;j++){ await put(['runs'],runs[j].id+'.json',JSON.stringify(runs[j],null,2)); n++; }
+
+  var outs=await vomOutputs(p,null);
+  for(var k=0;k<outs.length;k++){
+    var f=null;
+    try{ f=await vomOpenOutput(p,null,outs[k]); }catch(e){ f=null; }
+    if(!f) continue;
+    await put(['outputs',vomSlug(outs[k].tool)],outs[k].name,f); n++;
+  }
+  p.mirror=p.mirror||{};
+  p.mirror.written=Date.now();
+  await vomProjectPut(p);
+  return {ok:true,files:n};
+}
+
+/* Debounced, because ten ratings in a row is one write, not ten. */
+var _vomMirrorTimer=null;
+function vomMirrorTouch(p,delay){
+  if(!p||p.store!=='browser'||!p.mirror) return;
+  clearTimeout(_vomMirrorTimer);
+  _vomMirrorTimer=setTimeout(function(){
+    vomMirrorWrite(p).catch(function(){});
+  },delay==null?2500:delay);
 }
 
 /* Which project the tools should open. One key, shared by every page. */
@@ -6121,16 +6319,35 @@ async function vomDatasets(p,handle){
     }
     return out.sort(function(a,b){return _vomNat(a.name,b.name);});
   }
+  var out2=[];
   var db=await vomManagerDb();
-  if(!db) return [];
-  var dss=await _vomMgrReq(db,'datasets',function(s){return s.getAll();});
-  var mine=(dss||[]).filter(function(d){return (d.projectIds||[]).indexOf(p.id)>=0;}), out2=[];
-  for(var i=0;i<mine.length;i++){
-    var recs=await _vomMgrReq(db,'images',function(s){return s.index('dsId').getAll(mine[i].id);});
-    out2.push({id:mine[i].id,name:mine[i].name,count:(recs||[]).length,
-               edited:(recs||[]).filter(function(r){return r.edits;}).length,
-               note:mine[i].note||'',updated:mine[i].updated||mine[i].created||0,where:'browser'});
+  if(db){
+    var dss=await _vomMgrReq(db,'datasets',function(s){return s.getAll();});
+    var mine=(dss||[]).filter(function(d){return (d.projectIds||[]).indexOf(p.id)>=0;});
+    for(var i=0;i<mine.length;i++){
+      var recs=await _vomMgrReq(db,'images',function(s){return s.index('dsId').getAll(mine[i].id);});
+      out2.push({id:mine[i].id,name:mine[i].name,count:(recs||[]).length,
+                 edited:(recs||[]).filter(function(r){return r.edits;}).length,
+                 note:mine[i].note||'',updated:mine[i].updated||mine[i].created||0,where:'browser'});
+    }
   }
+  /* Manifests from an imported project: real datasets with real curation and no
+     pixels. Shown rather than hidden, and marked, because a project that
+     silently listed four datasets when its file described six would be lying
+     about what you had. */
+  var pend=[];
+  try{ pend=await _vomIdx('manifests',p.id); }catch(e){ pend=[]; }
+  var have={};
+  out2.forEach(function(d){have[d.name]=1;});
+  pend.forEach(function(m){
+    if(have[m.name]) return;
+    var d=m.doc||{};
+    out2.push({id:m.id,name:m.name||d.name||'Dataset',
+               count:(d.images||[]).length,
+               edited:(d.images||[]).filter(function(i){return i.edits;}).length,
+               note:d.note||'',updated:m.imported||0,where:'browser',
+               pending:true,doc:d});
+  });
   return out2.sort(function(a,b){return _vomNat(a.name,b.name);});
 }
 
@@ -6173,6 +6390,13 @@ async function vomOpenDataset(p,handle,dsId,onProgress){
     }
     return files;
   }
+  /* A manifest has no pixels behind it. Saying so is the whole point of marking
+     them pending — handing back an empty array would read as "it worked and
+     there was nothing in it". */
+  var pending=null;
+  try{ pending=await _vomTx('manifests','readonly',function(s){return s.get(dsId);}); }catch(e){}
+  if(pending) throw new Error('That dataset came from an imported project file, which carries the ' +
+    'curation but not the images. Import the image files into it first.');
   var db=await vomManagerDb();
   if(!db) return [];
   var recs=await _vomMgrReq(db,'images',function(s){return s.index('dsId').getAll(dsId);});
@@ -6187,6 +6411,223 @@ async function vomOpenDataset(p,handle,dsId,onProgress){
     if(onProgress) onProgress(j+1,recs.length);
   }
   return out;
+}
+
+/* ── A project as a portable file ─────────────────────────────────────────
+   The archival unit. What you attach to a data-availability statement, hand a
+   co-author, or keep when a paper is finished: the dataset manifests with their
+   session metadata and curation, the full run log, and every output. A few MB.
+
+   NOT the images. Half a gigabyte per shoot would make this slow enough to look
+   broken and is the one part you already have in a folder somewhere. What
+   travels is everything that would otherwise exist only inside one browser. */
+function _vomU32(n){return [n&255,(n>>8)&255,(n>>16)&255,(n>>24)&255];}
+function _vomU16(n){return [n&255,(n>>8)&255];}
+var _VOM_CRC=null;
+function _vomCrc(buf){
+  if(!_VOM_CRC){
+    _VOM_CRC=new Uint32Array(256);
+    for(var i=0;i<256;i++){var c=i;for(var k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);_VOM_CRC[i]=c>>>0;}
+  }
+  var crc=0xFFFFFFFF;
+  for(var j=0;j<buf.length;j++) crc=(_VOM_CRC[(crc^buf[j])&255]^(crc>>>8))>>>0;
+  return (crc^0xFFFFFFFF)>>>0;
+}
+/* Store-only, no compression. files = [{name, bytes:Uint8Array}].
+   The central directory record is FORTY-SIX bytes: six 16-bit fields before the
+   CRC, not seven. An extra one puts every entry after the first two bytes out
+   and `unzip -t` rejects the archive — which the Analyzer shipped with, hidden
+   because macOS Archive Utility falls back to the local headers. */
+function vomZip(files){
+  var parts=[], central=[], offset=0, enc=new TextEncoder();
+  for(var i=0;i<files.length;i++){
+    var nm=enc.encode(files[i].name), by=files[i].bytes, crc=_vomCrc(by);
+    var local=new Uint8Array([0x50,0x4b,0x03,0x04].concat(
+      _vomU16(20),_vomU16(0),_vomU16(0),_vomU16(0),_vomU16(0),
+      _vomU32(crc),_vomU32(by.length),_vomU32(by.length),
+      _vomU16(nm.length),_vomU16(0)));
+    parts.push(local,nm,by);
+    central.push(new Uint8Array([0x50,0x4b,0x01,0x02].concat(
+      _vomU16(20),_vomU16(20),_vomU16(0),_vomU16(0),_vomU16(0),_vomU16(0),
+      _vomU32(crc),_vomU32(by.length),_vomU32(by.length),
+      _vomU16(nm.length),_vomU16(0),_vomU16(0),_vomU16(0),_vomU16(0),
+      _vomU32(0),_vomU32(offset))),nm);
+    offset+=local.length+nm.length+by.length;
+  }
+  var cdSize=0;
+  central.forEach(function(c){cdSize+=c.length;});
+  var end=new Uint8Array([0x50,0x4b,0x05,0x06].concat(
+    _vomU16(0),_vomU16(0),_vomU16(files.length),_vomU16(files.length),
+    _vomU32(cdSize),_vomU32(offset),_vomU16(0)));
+  return new Blob(parts.concat(central,[end]),{type:'application/zip'});
+}
+
+function _vomTxt(s){return new TextEncoder().encode(s);}
+function vomSlug(s){
+  var t=String(s||'item').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-');
+  return t||'item';
+}
+
+/* The full manifest for one dataset, whichever store it lives in. */
+async function vomDatasetDoc(p,handle,d){
+  if(p.store==='folder'&&handle&&d.slug){
+    try{
+      var root=await handle.getDirectoryHandle('datasets',{create:false});
+      var dir=await root.getDirectoryHandle(d.slug);
+      return JSON.parse(await (await (await dir.getFileHandle('dataset.json')).getFile()).text());
+    }catch(e){}
+  }
+  if(d.pending&&d.doc) return d.doc;
+  var db=await vomManagerDb();
+  if(!db) return null;
+  var ds=null;
+  try{ ds=await _vomMgrReq(db,'datasets',function(s){return s.get(d.id);}); }catch(e){}
+  if(!ds) return null;
+  var recs=[];
+  try{ recs=await _vomMgrReq(db,'images',function(s){return s.index('dsId').getAll(d.id);})||[]; }catch(e){}
+  recs.sort(function(a,b){return _vomNat(a.name,b.name);});
+  return {format:'vom-dataset',version:1,id:ds.id,name:ds.name,note:ds.note||'',
+          created:ds.created,updated:ds.updated||Date.now(),
+          meta:ds.meta||{},solar:ds.solar||null,projectIds:ds.projectIds||[],
+          excluded:ds.excluded||[],
+          images:recs.map(function(r){
+            return {file:r.origName||r.name,name:r.name,rating:r.rating||0,
+                    flag:r.flag||'',tags:r.tags||[],note:r.note||'',
+                    edits:r.edits||null};
+          })};
+}
+
+async function vomExportProject(p,handle,onProgress){
+  if(!p) throw new Error('no project');
+  var files=[], note=[];
+  files.push({name:'vom-project.json',bytes:_vomTxt(JSON.stringify({
+    format:'vom-project',version:1,id:p.id,name:p.name,store:p.store,
+    created:new Date(p.created||Date.now()).toISOString(),
+    exported:new Date().toISOString(), note:p.note||'',
+    contains:'dataset manifests, the run log and every output file \u2014 not the images'
+  },null,2))});
+
+  var ds=await vomDatasets(p,handle);
+  for(var i=0;i<ds.length;i++){
+    if(onProgress) onProgress('datasets',i+1,ds.length);
+    var doc=await vomDatasetDoc(p,handle,ds[i]);
+    if(!doc) continue;
+    files.push({name:'datasets/'+vomSlug(ds[i].slug||ds[i].name)+'/dataset.json',
+                bytes:_vomTxt(JSON.stringify(doc,null,2))});
+  }
+
+  var runs=await vomRuns(p,handle);
+  runs.forEach(function(r){
+    files.push({name:'runs/'+r.id+'.json',bytes:_vomTxt(JSON.stringify(r,null,2))});
+  });
+
+  var outs=await vomOutputs(p,handle);
+  for(var j=0;j<outs.length;j++){
+    if(onProgress) onProgress('outputs',j+1,outs.length);
+    var f=null;
+    try{ f=await vomOpenOutput(p,handle,outs[j]); }catch(e){ f=null; }
+    /* An output that cannot be read is NAMED in the file rather than silently
+       dropped — an archive that is quietly short is worse than one that says
+       what is missing. */
+    if(!f){ note.push(outs[j].tool+'/'+outs[j].name); continue; }
+    files.push({name:'outputs/'+vomSlug(outs[j].tool)+'/'+outs[j].name,
+                bytes:new Uint8Array(await f.arrayBuffer())});
+  }
+  if(note.length){
+    files.push({name:'MISSING.txt',bytes:_vomTxt(
+      'These outputs were listed by the project but could not be read when it was exported:\n\n'+
+      note.join('\n')+'\n')});
+  }
+  return {blob:vomZip(files),files:files.length,missing:note.length,
+          name:vomSlug(p.name)+'.vom.zip'};
+}
+
+/* ── Reading one back ─────────────────────────────────────────────────────
+   Always as a NEW browser project with a fresh id. Reusing the id would let an
+   import silently overwrite the project you already had open under that name,
+   which is the one outcome an import must never produce. */
+function _vomFindEnd(u8){
+  for(var i=u8.length-22;i>=0&&i>u8.length-65558;i--)
+    if(u8[i]===0x50&&u8[i+1]===0x4b&&u8[i+2]===0x05&&u8[i+3]===0x06) return i;
+  return -1;
+}
+async function vomUnzip(blob){
+  var u8=new Uint8Array(await blob.arrayBuffer()), dv=new DataView(u8.buffer);
+  var end=_vomFindEnd(u8);
+  if(end<0) throw new Error('That does not look like a project file.');
+  var n=dv.getUint16(end+10,true), off=dv.getUint32(end+16,true), out={};
+  var dec=new TextDecoder();
+  for(var i=0;i<n;i++){
+    if(u8[off]!==0x50||u8[off+1]!==0x4b||u8[off+2]!==0x01||u8[off+3]!==0x02)
+      throw new Error('That project file is damaged.');
+    var method=dv.getUint16(off+10,true);
+    var size=dv.getUint32(off+24,true);
+    var nl=dv.getUint16(off+28,true), el=dv.getUint16(off+30,true), cl=dv.getUint16(off+32,true);
+    var lho=dv.getUint32(off+42,true);
+    var name=dec.decode(u8.subarray(off+46,off+46+nl));
+    if(method!==0) throw new Error('That project file uses compression this reader does not support.');
+    var lnl=dv.getUint16(lho+26,true), lel=dv.getUint16(lho+28,true);
+    var start=lho+30+lnl+lel;
+    out[name]=u8.subarray(start,start+size);
+    off+=46+nl+el+cl;
+  }
+  return out;
+}
+
+async function vomImportProject(blob){
+  var entries=await vomUnzip(blob), dec=new TextDecoder();
+  var manifest=entries['vom-project.json'];
+  if(!manifest) throw new Error('That file has no vom-project.json in it, so it is not a project.');
+  var doc=JSON.parse(dec.decode(manifest));
+  if(doc.format!=='vom-project') throw new Error('That file is not a Vis-O-Matic project.');
+
+  var p={id:vomUid(),name:(doc.name||'Imported project')+' (imported)',store:'browser',
+         created:Date.now(),updated:Date.now(),datasets:0,runs:0,folderName:null,
+         note:doc.note||'', importedFrom:doc.id||null};
+  await vomProjectPut(p);
+
+  var counts={datasets:0,runs:0,outputs:0};
+  for(var name in entries){
+    if(/^datasets\/[^/]+\/dataset\.json$/.test(name)){
+      var d=null;
+      try{ d=JSON.parse(dec.decode(entries[name])); }catch(e){ continue; }
+      if(!d||d.format!=='vom-dataset') continue;
+      /* A fresh id, for the same reason the project gets one. */
+      await _vomTx('manifests','readwrite',function(s){
+        return s.put({id:vomUid().replace('p_','m_'),projectId:p.id,name:d.name||'Dataset',
+                      doc:d,imported:Date.now()});
+      });
+      counts.datasets++;
+    } else if(/^runs\/.+\.json$/.test(name)){
+      var r=null;
+      try{ r=JSON.parse(dec.decode(entries[name])); }catch(e){ continue; }
+      r.id='r_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      r.projectId=p.id;
+      await _vomTx('runs','readwrite',function(s){return s.put(r);});
+      counts.runs++;
+    } else if(/^outputs\/[^/]+\/.+/.test(name)){
+      var bits=name.split('/');
+      await vomSaveOutput(p,null,{tool:bits[1],name:bits.slice(2).join('/'),
+        blob:new Blob([entries[name]])});
+      counts.outputs++;
+    }
+  }
+  p.runs=counts.runs; p.updated=Date.now();
+  await vomProjectPut(p);
+  return {project:p,counts:counts};
+}
+
+/* Removing an output. Only browser projects: a folder project's outputs are
+   ordinary files in a folder you own, and deleting your files from a web page
+   is not a power this tool should take. The RUN LOG is untouched either way —
+   what you did is a different fact from what is still lying around, and losing
+   the record because you tidied up a file would be the wrong trade. */
+async function vomDeleteOutput(p,o){
+  if(!p||!o) return false;
+  if(p.store==='folder') throw new Error('This output is a file in your project folder — delete it there.');
+  if(!o.id) return false;
+  await _vomTx('outputs','readwrite',function(s){return s.delete(o.id);});
+  return true;
 }
 
 /* One output back as a File — the Visualizer's way in, since what it consumes
@@ -6238,12 +6679,20 @@ async function vomConnect(){
 
 /* blob + filename in, a description of what happened out. Falls back to a
    download rather than losing the file — losing an export because a folder
-   went away would be the worst possible trade. */
+   went away would be the worst possible trade.
+
+   `vomNextDest` is a ONE-SHOT override set by the split button's menu and
+   cleared the moment it is read. A destination chosen for one export must not
+   quietly become the setting for every export after it. */
+var vomNextDest = null;
+
 async function vomSendOutput(blob, filename, params){
-  if(!vomProjectWritable()){
+  var dest = vomNextDest; vomNextDest = null;
+  if(dest === 'download' || !vomProjectWritable()){
     vomDownload(blob, filename);
     return 'downloaded';
   }
+  if(dest === 'both') vomDownload(blob, filename);
   try{
     var saved = await vomSaveOutput(vomProject, vomHandle, {tool:vomToolSlug, name:filename, blob:blob});
     await vomLogRun(vomProject, vomHandle, {
@@ -6254,10 +6703,11 @@ async function vomSendOutput(blob, filename, params){
       datasetName: vomOpenedDataset ? vomOpenedDataset.name : '',
       params: params || {}, outputs: [saved.name],
     });
-    vomToast('Saved into ' + vomProject.name);
-    return 'saved into the project';
+    vomToast(dest === 'both' ? 'Downloaded and saved into ' + vomProject.name
+                             : 'Saved into ' + vomProject.name);
+    return dest === 'both' ? 'saved into the project and downloaded' : 'saved into the project';
   }catch(e){
-    vomDownload(blob, filename);
+    if(dest !== 'both') vomDownload(blob, filename);
     vomToast('Could not save into the project — downloaded instead.');
     return 'downloaded instead';
   }
@@ -6279,10 +6729,17 @@ function vomRenderProjBar(){
   var el = document.getElementById('vomProjBar');
   if(!el) return;
   var HUB = 'https://www.jonathancinnamon.com/vis-o-matic/#projects';
+  /* Three zones, always in the same order: WHAT is open on the left, the tool's
+     own project ACTIONS in the middle, and the way to the hub pinned at the
+     right. The hub link used to be a quiet piece of text at the end of a row
+     that also held two buttons, so the one thing every tool shares looked like
+     the least important thing on the bar. */
+  var hub = '<a class="pb-hub" href="' + HUB + '" title="Create, rename, fill and delete projects">' +
+            '<span class="pb-hub-i">\u25a6</span>Projects</a>';
   if(!vomProject){
     el.className = 'empty';
-    el.innerHTML = '<span class="pb-none">No project open — outputs download as usual</span>' +
-      '<a class="pb-link" href="' + HUB + '">Start or open one &rsaquo;</a>';
+    el.innerHTML = '<span class="pb-none">No project open \u2014 outputs download as usual</span>' +
+      '<span class="pb-mid"></span>' + hub;
     return;
   }
   el.className = '';
@@ -6294,14 +6751,20 @@ function vomRenderProjBar(){
     '<span class="pb-label">Project</span>' +
     '<span class="pb-name">' + vomEsc(vomProject.name) + '</span>' + pill +
     (vomProject.folderName ? '<span class="pb-sub">' + vomEsc(vomProject.folderName) + '</span>' : '') +
+    (vomProject.mirror ? '<span class="pb-pill mirror" title="Mirrored to ' +
+      vomEsc(vomProject.mirror.name) + '">mirrored</span>' : '') +
     (needs
-      ? '<button type="button" onclick="vomConnect()">Connect folder</button>'
-      : '<span class="pb-dest">outputs are saved here</span>') +
-    (vomIntake && !needs
-      ? '<button type="button" class="pb-open" onclick="vomPickOpen()">' +
-        (vomIntakeKind === 'csv' ? 'Open a CSV from the project' : 'Open a dataset') + '</button>'
-      : '') +
-    '<a class="pb-link" href="' + HUB + '">Manage projects &rsaquo;</a>';
+      /* Only reachable when Chrome will not re-grant without a gesture. Worded
+         as reconnecting, because from where you sit the folder was already
+         connected and something outside the tool let go of it. */
+      ? '<button type="button" class="pb-warn" onclick="vomConnect()">Reconnect folder</button>'
+      : '<span class="pb-dest">\u25cf saved here</span>') +
+    '<span class="pb-mid">' +
+      (vomIntake && !needs
+        ? '<button type="button" class="pb-open" onclick="vomPickOpen()">' +
+          (vomIntakeKind === 'csv' ? 'Open a project CSV' : 'Open a project dataset') + '</button>'
+        : '') +
+    '</span>' + hub;
 }
 
 /* ── Opening something out of the project ─────────────────────────────────
@@ -6444,6 +6907,176 @@ async function vomPickTakeCsv(i){
   vomPickClose();
   try{ vomIntake([f]); }catch(e){ alert('This tool could not take that file: ' + (e.message||e)); }
 }
+
+/* ── The split button ─────────────────────────────────────────────────────
+   Every export button in the tool gains a chevron. Pressing the button itself
+   does the obvious thing — into the project when one is open, a download when
+   not — and the chevron offers the alternatives. No extra click for the case
+   you wanted, and the button always says where the file is about to go.
+
+   The button is NOT replaced or rewired. Its id, its onclick and every
+   listener already on it stay exactly as they were; the chevron sets a
+   one-shot destination and then clicks it. Rewiring would mean re-implementing
+   each tool's export in this file, which is how the two would drift apart. */
+var VOM_SPLIT_MATCH = null;    /* set by vomInitProjBar from the tool's config */
+
+/* The tool's own label says WHAT is being exported — "Clusters CSV",
+   "Histogram CSV", "Grid CSV" — and seven buttons all relabelled "Save into
+   project" would be seven identical buttons. So the destination goes on the
+   chevron instead: the pair reads "Clusters CSV → project ▾". */
+function vomSplitWhere(){ return vomProjectWritable() ? 'project' : 'download'; }
+
+function vomSplitRelabel(){
+  var w = vomSplitWhere();
+  Array.prototype.forEach.call(document.querySelectorAll('.vom-split-chev'), function(c){
+    c.innerHTML = '<i>' + w + '</i>\u25be';
+    c.title = w === 'project'
+      ? 'Goes into ' + (vomProject ? vomProject.name : 'the project') + ' \u2014 click to choose otherwise'
+      : 'Downloads to your computer \u2014 click to choose otherwise';
+    /* A live chevron beside a disabled button offers a choice about an export
+       that cannot happen. It follows its button. */
+    var b = c.parentNode && c.parentNode.querySelector('[data-vom-split]');
+    if(b){
+      c.disabled = !!b.disabled;
+      /* In a narrow sidebar the word doubles the pair's width and pushes the
+         button's own label into two lines. The arrow alone still reads as
+         "there is a choice here", and the title still says what it is. */
+      c.classList.toggle('tight', b.offsetWidth > 0 && b.offsetWidth < 96);
+    }
+  });
+}
+
+function vomSplitify(){
+  if(!VOM_SPLIT_MATCH) return;
+  var btns = [];
+  try{ btns = Array.prototype.slice.call(document.querySelectorAll('button,a.btn,.btn')); }
+  catch(e){ return; }
+  btns.forEach(function(b){
+    if(b.getAttribute('data-vom-split')) return;
+    if(b.classList.contains('vom-split-chev')) return;
+    if(!VOM_SPLIT_MATCH(b)) return;
+    b.setAttribute('data-vom-split', '1');
+    var wrap = document.createElement('span');
+    wrap.className = 'vom-split';
+    /* A button positioned by its own margin keeps that position: the margin
+       moves to the wrapper, or `margin-left:auto` stops pushing anything. */
+    ['marginLeft','marginRight','marginTop','marginBottom','flex','alignSelf','order'].forEach(function(k){
+      if(b.style[k]){ wrap.style[k] = b.style[k]; b.style[k] = ''; }
+    });
+    b.parentNode.insertBefore(wrap, b);
+    wrap.appendChild(b);
+    var chev = document.createElement('button');
+    chev.type = 'button';
+    chev.className = 'vom-split-chev';
+    chev.setAttribute('aria-label', 'Choose where to save');
+    chev.addEventListener('click', function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      vomSplitMenu(b, chev);
+    });
+    wrap.appendChild(chev);
+  });
+  vomSplitRelabel();
+}
+
+/* The Analyzer builds most of its export buttons as results arrive, so a
+   one-off pass at load would decorate two of them and miss nine. */
+function vomSplitWatch(){
+  if(!VOM_SPLIT_MATCH || !window.MutationObserver) return;
+  var pending = null;
+  new MutationObserver(function(){
+    clearTimeout(pending);
+    pending = setTimeout(vomSplitify, 120);   /* a render is many mutations */
+  }).observe(document.body, {childList:true, subtree:true,
+                             attributes:true, attributeFilter:['disabled']});
+}
+
+function vomSplitClose(){
+  var m = document.getElementById('vomSplitMenu');
+  if(m) m.remove();
+}
+
+function vomSplitMenu(btn, anchor){
+  var open = document.getElementById('vomSplitMenu');
+  vomSplitClose();
+  if(open && open.getAttribute('data-for') === (btn.id || btn.textContent)) return;  /* toggle */
+
+  var rows = [];
+  if(vomProjectWritable()){
+    rows.push(['project', 'Save into ' + vomEsc(vomProject.name), 'the project ' +
+      (vomProject.store === 'folder' ? 'folder' : 'database')]);
+    rows.push(['download', 'Download to computer', '']);
+    rows.push(['both', 'Save to both', '']);
+  } else {
+    rows.push(['download', 'Download to computer', '']);
+    rows.push(['newproject', 'Start a project and save into it\u2026',
+      'keeps this and everything else from this work together']);
+  }
+
+  var m = document.createElement('div');
+  m.id = 'vomSplitMenu';
+  m.setAttribute('data-for', btn.id || btn.textContent);
+  m.innerHTML = rows.map(function(r, i){
+    return '<button type="button" data-dest="' + r[0] + '"' + (i === 0 ? ' class="cur"' : '') + '>' +
+           r[1] + (r[2] ? '<span>' + r[2] + '</span>' : '') + '</button>';
+  }).join('');
+  document.body.appendChild(m);
+
+  var r = anchor.getBoundingClientRect();
+  m.style.top = (r.bottom + window.scrollY + 4) + 'px';
+  /* Kept on screen: anchored right to the chevron, then pulled back if that
+     would run it off the edge. */
+  var w = m.offsetWidth || 240;
+  var left = Math.min(r.right + window.scrollX - w, window.scrollX + document.documentElement.clientWidth - w - 8);
+  m.style.left = Math.max(window.scrollX + 8, left) + 'px';
+
+  m.addEventListener('click', async function(ev){
+    var t = ev.target.closest('button[data-dest]');
+    if(!t) return;
+    var dest = t.getAttribute('data-dest');
+    vomSplitClose();
+    if(dest === 'newproject'){
+      if(!await vomQuickProject()) return;
+      dest = 'project';
+    }
+    vomNextDest = dest === 'project' ? null : dest;
+    btn.click();
+  });
+  setTimeout(function(){
+    document.addEventListener('click', function once(ev){
+      if(ev.target.closest('#vomSplitMenu')) { document.addEventListener('click', once, {once:true}); return; }
+      vomSplitClose();
+    }, {once:true});
+  }, 0);
+}
+
+/* Starting a project from inside an export, so the answer to "where should
+   this go" can be "somewhere that does not exist yet" without losing the file
+   you were in the middle of saving. */
+async function vomQuickProject(){
+  var name = prompt('Name for the new project:', 'Untitled project');
+  if(name === null) return false;
+  var store = 'browser';
+  if(vomCanUseFolders()){
+    store = confirm('Keep this project in a FOLDER on your computer?\n\n' +
+      'OK — choose a folder (files stay on disk, shareable, no storage limit)\n' +
+      'Cancel — keep it in this browser') ? 'folder' : 'browser';
+  }
+  try{
+    var p = await vomCreateProject(name, store);
+    await vomSetCurrent(p.id);
+    vomProject = p;
+    if(store === 'folder'){
+      var q = await vomQuietAccess(p);
+      if(q.ok){ vomHandle = q.handle; vomAccess = 'ok'; }
+      else { await vomConnect(); }
+    } else vomAccess = 'ok';
+  }catch(e){
+    alert('Could not start that project: ' + (e.message || e));
+    return false;
+  }
+  vomRenderProjBar();
+  return vomProjectWritable();
+}
 function vomEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 
@@ -6457,16 +7090,27 @@ async function vomInitProjBar(version, slug, opts){
     vomIntake = opts.intake;
     vomIntakeKind = opts.kind || 'images';
   }
+  if(opts && typeof opts.exportBtn === 'function') VOM_SPLIT_MATCH = opts.exportBtn;
   try{
     var id = await vomCurrentId();
     vomProject = id ? await vomProjectGet(id) : null;
     if(vomProject && vomProject.store === 'browser') vomAccess = 'ok';
+    /* Reconnect without being asked wherever the browser still remembers the
+       grant. Pressing a button to reach a folder you already chose is a step
+       that exists for the browser's benefit, not yours. */
+    if(vomProject && vomProject.store === 'folder'){
+      var q = await vomQuietAccess(vomProject);
+      if(q.ok){ vomHandle = q.handle; vomAccess = 'ok'; }
+      else { vomAccess = q.state === 'forgotten' ? 'forgotten' : 'prompt'; }
+    }
   }catch(e){ vomProject = null; }
   vomRenderProjBar();
+  vomSplitify();
+  vomSplitWatch();
 }
 /*__VOM_PROJBARJS_END__*/
 /*__VOM_PROJBARWIRE_START__*/
-window.addEventListener("DOMContentLoaded", function(){ vomInitProjBar((typeof APP_VERSION!=='undefined'?APP_VERSION:''), "image-colour-analyzer", {kind:"images", intake:function(files){ addFiles(files); }}); });
+window.addEventListener("DOMContentLoaded", function(){ vomInitProjBar((typeof APP_VERSION!=='undefined'?APP_VERSION:''), "image-colour-analyzer", {kind:"images", intake:function(files){ addFiles(files); }, exportBtn:function(b){ return /^\s*(download|export)/i.test(b.getAttribute('onclick')||''); }}); });
 /*__VOM_PROJBARWIRE_END__*/
 </script>
 </body>
