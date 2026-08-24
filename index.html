@@ -6446,14 +6446,62 @@ async function vomOpenDataset(p,handle,dsId,onProgress){
   if(!db) return [];
   var recs=await _vomMgrReq(db,'images',function(s){return s.index('dsId').getAll(dsId);});
   (recs||[]).sort(function(a,b){return _vomNat(a.name,b.name);});
-  var out=[];
+
+  /* A dataset belongs to a LIST of projects but its bytes live in exactly one
+     place. Once it has been adopted into a folder project the files are on disk
+     and the browser copies are freed — so a second project listing the same
+     dataset finds records with `fsFile` and no blob behind them.
+
+     That used to be a `continue`, which handed back an empty array: the picker
+     listed "Shared set · 3 images" and opened nothing, silently. So the folder
+     is followed instead, through whichever project owns it, and when it cannot
+     be reached this SAYS SO rather than pretending the dataset is empty. */
+  var dir=null, dirTried=false;
+  async function folderDir(){
+    if(dirTried) return dir;
+    dirTried=true;
+    var ds=null;
+    try{ ds=await _vomMgrReq(db,'datasets',function(s){return s.get(dsId);}); }catch(e){}
+    if(!ds||!ds.fs||!ds.fs.slug) return null;
+    var owners=(ds.projectIds||[]).slice();
+    if(p.store==='folder') owners.unshift(p.id);
+    for(var i=0;i<owners.length;i++){
+      var op=null;
+      try{ op=await vomProjectGet(owners[i]); }catch(e){}
+      if(!op||op.store!=='folder') continue;
+      var q=await vomQuietAccess(op);
+      if(!q.ok) continue;
+      try{
+        var root=await q.handle.getDirectoryHandle('datasets',{create:false});
+        dir=await root.getDirectoryHandle(ds.fs.slug);
+        return dir;
+      }catch(e){}
+    }
+    return null;
+  }
+
+  var out=[], missing=0;
   for(var j=0;j<recs.length;j++){
     var r=recs[j],b=null;
+    if(r.fsFile){
+      var d=await folderDir();
+      if(d){
+        try{ out.push(await (await d.getFileHandle(r.fsFile)).getFile()); }
+        catch(e){ missing++; }
+      } else missing++;
+      if(onProgress) onProgress(j+1,recs.length);
+      continue;
+    }
     try{ b=await _vomMgrReq(db,'blobs',function(s){return s.get(r.id);}); }catch(err){}
-    if(!b||!b.blob) continue;         /* a folder-held record inside a browser project */
+    if(!b||!b.blob){ missing++; continue; }
     out.push(new File([b.blob],r.origName||r.name,
       {type:r.type||b.blob.type||'image/jpeg',lastModified:r.dateMs||r.added||Date.now()}));
     if(onProgress) onProgress(j+1,recs.length);
+  }
+  if(!out.length && missing){
+    throw new Error('This dataset’s images live in a project folder on your computer, and that folder ' +
+      'is not reachable from here. Open the folder project once — the click is what lets the browser ' +
+      'ask for permission — and it will work from every project it belongs to.');
   }
   return out;
 }
@@ -6787,7 +6835,67 @@ function vomFlash(msg, bad){
   }, bad ? 4500 : 2400);
 }
 
+/* ── One naming convention, five tools ────────────────────────────────────
+       tool_subject_what.ext
+
+   SUBJECT is the dataset the output describes; the image's own name when it
+   came from a single image; and `group` when it came from loose images that are
+   not a dataset. WHAT is whatever the tool already called the file.
+
+   No processing date. A date in a filename is a fact about the file wearing a
+   costume — it sorts badly, it makes names long, and the hub already shows when
+   each was made beside its size. Any the tools still generate are stripped here,
+   so the rule holds even where a tool has not been touched.
+
+   Applied at THIS seam rather than in each tool, because five tools naming
+   files five ways is what produced the problem. `vomSubject` is set by the tool
+   when it knows better than the open dataset — the Cutter working on one image,
+   for instance. */
+var vomToolShort = '';        /* set by vomInitProjBar */
+var vomSubject = null;        /* {kind:'image'|'group', name} — optional override */
+var vomSubjectFn = null;      /* a tool's own answer, asked at save time */
+
+function _vomStripDate(n){
+  /* 2026-08-24, 20260824 and _2026_08_24, with or without a leading separator. */
+  return n.replace(/[-_ ]?\d{4}[-_]?\d{2}[-_]?\d{2}(?=[-_. ]|$)/g, '');
+}
+/* Remove one whole occurrence of `part` from the stem, on a separator
+   boundary, so a tool that already put its own name or the subject in the
+   filename does not end up saying it twice. */
+function _vomTrimPart(stem, part){
+  /* No escaping needed: both callers pass a slug, which is word characters and
+     hyphens only. An earlier version escaped by hand and lost a backslash to
+     three layers of quoting, producing an invalid character class that threw a
+     SyntaxError and took the whole injected script down with it. */
+  if(!part || !/^[\w-]+$/.test(part)) return stem;
+  return stem.replace(new RegExp('(^|[_-])'+part+'([_-]|$)','i'),
+                      function(m,a,b){ return (a&&b)?a:''; })
+             .replace(/^[-_]+|[-_]+$/g,'');
+}
+
+function vomOutputName(filename){
+  var dot=filename.lastIndexOf('.'), stem=dot>0?filename.slice(0,dot):filename,
+      ext=dot>0?filename.slice(dot):'';
+  stem=_vomStripDate(stem).replace(/[-_]{2,}/g,'_').replace(/^[-_]+|[-_]+$/g,'');
+
+  var subj=null;
+  if(vomSubject && vomSubject.name) subj=vomSubject.name;
+  if(!subj && vomSubjectFn){ try{ subj=vomSubjectFn(); }catch(e){ subj=null; } }
+  if(!subj && vomOpenedDataset && vomOpenedDataset.name) subj=vomOpenedDataset.name;
+  if(!subj) subj='group';
+  subj=vomSlug(subj);
+
+  var tool=vomToolShort||vomSlug(vomToolSlug||'vom');
+  /* SunSync names its own files `sunsync_geometry…`, and the Cutter puts the
+     image name in `AH_0001_cutout.png`. Both are already correct halves of the
+     convention, so the parts are removed from the stem rather than repeated. */
+  stem=_vomTrimPart(_vomTrimPart(stem, tool), subj) || 'output';
+
+  return [tool, subj, stem].join('_')+ext;
+}
+
 async function vomSendOutput(blob, filename, params){
+  filename = vomOutputName(filename);
   var dest = vomNextDest; vomNextDest = null;
   if(dest === 'download' || !vomProjectWritable()){
     vomDownload(blob, filename);
@@ -7194,14 +7302,23 @@ function vomEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
 /* opts = {kind:'images'|'csv', intake:function(files){}}. Optional: a tool that
    passes none simply has no Open button, which is what the three-argument form
    did before this existed. */
+var VOM_SHORT = {'image-manager':'manager','image-cutter':'cutter',
+  'image-colour-analyzer':'analyzer','image-colour-visualizer':'visualizer',
+  'sunsync-360':'sunsync'};
+
 async function vomInitProjBar(version, slug, opts){
   vomToolVersion = version || '';
   vomToolSlug = slug || (location.pathname.match(/\/([a-z0-9-]+)\/?$/) || [])[1] || 'tool';
+  vomToolShort = VOM_SHORT[vomToolSlug] || vomSlug(vomToolSlug);
   if(opts && typeof opts.intake === 'function'){
     vomIntake = opts.intake;
     vomIntakeKind = opts.kind || 'images';
   }
   if(opts && typeof opts.exportBtn === 'function') VOM_SPLIT_MATCH = opts.exportBtn;
+  /* A tool that knows its subject better than the open dataset says so — the
+     Cutter working on one image, for instance. Evaluated at save time, not now,
+     because what is loaded changes. */
+  if(opts && typeof opts.subject === 'function') vomSubjectFn = opts.subject;
   try{
     var id = await vomCurrentId();
     vomProject = id ? await vomProjectGet(id) : null;
@@ -7221,7 +7338,7 @@ async function vomInitProjBar(version, slug, opts){
 }
 /*__VOM_PROJBARJS_END__*/
 /*__VOM_PROJBARWIRE_START__*/
-window.addEventListener("DOMContentLoaded", function(){ vomInitProjBar((typeof APP_VERSION!=='undefined'?APP_VERSION:''), "image-colour-analyzer", {kind:"images", intake:function(files){ addFiles(files); }, exportBtn:function(b){ return /^\s*(download|export)/i.test(b.getAttribute('onclick')||''); }}); });
+window.addEventListener("DOMContentLoaded", function(){ vomInitProjBar((typeof APP_VERSION!=='undefined'?APP_VERSION:''), "image-colour-analyzer", {kind:"images", intake:function(files){ addFiles(files); }, exportBtn:function(b){ return /^\s*(download|export)/i.test(b.getAttribute('onclick')||''); }, subject:function(){ try{ if(typeof queuedFiles==='undefined'||!queuedFiles.length) return null; return queuedFiles.length===1?queuedFiles[0].name.replace(/\.[^.]+$/,''):null; }catch(e){ return null; } }}); });
 /*__VOM_PROJBARWIRE_END__*/
 </script>
 </body>
