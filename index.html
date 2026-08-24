@@ -593,6 +593,20 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
 #vomProjBar .pb-hub-i{font-size:.72rem;opacity:.85}
 #vomProjBar .pb-pill.mirror{background:#eef3f7;color:var(--primary);border:1px solid var(--border)}
 #vomProjBar button.pb-warn{border-color:var(--warning-border);background:var(--warning-bg);color:#7a5200}
+/* The confirmation, on the button itself. Sized to the button it replaces so
+   nothing around it jumps while the message is showing. */
+/* The button is only tinted, so it never changes size. The words go in a
+   bubble above it. */
+[data-vom-split].vom-lit{background:var(--accent-light)!important;color:#12695c!important;
+  border-color:var(--accent)!important}
+[data-vom-split].vom-lit-bad{background:var(--warning-bg)!important;color:#7a5200!important;
+  border-color:var(--warning-border)!important}
+.vom-flash-note{position:absolute;z-index:9800;pointer-events:none;white-space:nowrap;
+  font-family:var(--vom-font);font-size:.78rem;line-height:1;padding:.34rem .6rem;
+  border-radius:var(--radius);background:#12695c;color:#fff;
+  box-shadow:0 4px 14px rgba(15,28,36,.28);animation:vomFlashIn .12s ease-out}
+.vom-flash-note.bad{background:var(--warning-border);color:#3a2600}
+@keyframes vomFlashIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 #vomProjBar .pb-pill{font-family:var(--vom-mono);font-size:.62rem;letter-spacing:.07em;
   text-transform:uppercase;padding:.1rem .34rem;border-radius:3px}
 #vomProjBar .pb-pill.folder{background:var(--accent-light);color:#12695c}
@@ -673,7 +687,7 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
 </div>
 <div class="vom-toolbar">
   <h1>Batch Image Analyzer</h1>
-  <p>Measure colour across a whole set of images</p>
+  <p>Analyze and visualize the colour properties of image datasets</p>
   <span class="tb-right"><button type="button" class="vom-help-btn" onclick="vomHelpOpen()" title="How this tool works">? Guide</button></span>
 </div>
 
@@ -683,7 +697,7 @@ details.image-card-d[open]>summary::before{content:'\25BC'}
 
   <!-- Quick start (always visible) + full instructions (collapsible) -->
   <div class="info-box">
-    <strong>Quick start:</strong> 1&nbsp;·&nbsp;Drop in images or a folder — nothing is uploaded. 2&nbsp;·&nbsp;Review the <b>data check</b> suggestions and the Configuration (defaults suit ordinary flat photos; for 360° imagery choose <b>360° / wide-angle</b> under Imagery mode and a projection panel appears directly below it). 3&nbsp;·&nbsp;For 360° sky work, load a <b>geometry sidecar</b> from SunSync 360 in the projection panel — it gives each frame a true-north heading, which is what makes column profiles and cross-dataset comparisons mean anything. 4&nbsp;·&nbsp;<b>Analyze Images</b>, then read the <b>Data</b> tab for CSVs and dataset statistics, the <b>Visualization</b> tab for figures, and the <b>Compare</b> tab for two-set ΔE2000 checks and outlier flags.
+    <strong>Quick start:</strong> 1&nbsp;·&nbsp;Drop in images or a folder. 2&nbsp;·&nbsp;Review the <b>data check</b> suggestions and set Configuration preferences. 3&nbsp;·&nbsp;<b>Analyze Images</b>, then read the <b>Data</b> tab for CSVs and dataset statistics, and the <b>Visualization</b> tab for dataset- and image-level visualizations.
   </div>
   <!-- Input -->
   <div class="card">
@@ -6008,23 +6022,41 @@ async function _vomUnique(dir,name){
 }
 
 /* o = {tool, name, blob, runId}. Returns what the run log should record. */
+/* Outputs are filed under the dataset they came from:
+
+       outputs/image-colour-analyzer/Ridge-evening/clusters.csv
+       outputs/image-colour-analyzer/Valley-bottom/clusters.csv
+
+   Two datasets measured with the same settings produce the same filenames, and
+   before this they landed in one directory where the second became
+   `clusters_2.csv` — a name that says nothing about which set it describes. In
+   a folder project those are files in Finder, so the only thing that can tell
+   them apart is where they sit.
+
+   An output made with no dataset open has no such folder and goes directly
+   under the tool, which is the honest place for it. */
 async function vomSaveOutput(p,handle,o){
   if(!p) throw new Error('no project open');
+  var dsName=(o.datasetName||'').trim();
+  var seg=dsName?vomSlug(dsName):'';
   if(p.store==='folder'){
     if(!handle) throw new Error('the project folder is not connected');
-    var dir=await _vomDirFor(handle,['outputs',o.tool]);
+    var names=seg?['outputs',vomSlug(o.tool),seg]:['outputs',vomSlug(o.tool)];
+    var dir=await _vomDirFor(handle,names);
     var name=await _vomUnique(dir,o.name);
     var fh=await dir.getFileHandle(name,{create:true});
     var w=await fh.createWritable();
     await w.write(o.blob);
     await w.close();
-    return {name:name, path:'outputs/'+o.tool+'/'+name, size:o.blob.size, where:'folder'};
+    return {name:name, path:names.join('/')+'/'+name, size:o.blob.size,
+            dataset:dsName, where:'folder'};
   }
   var rec={id:'o_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),
            projectId:p.id, tool:o.tool, runId:o.runId||null, name:o.name,
+           dataset:dsName, datasetId:o.datasetId||null,
            type:o.blob.type||'', size:o.blob.size, blob:o.blob, created:Date.now()};
   await _vomTx('outputs','readwrite',function(s){return s.put(rec);});
-  return {name:o.name, id:rec.id, size:rec.size, where:'browser'};
+  return {name:o.name, id:rec.id, size:rec.size, dataset:dsName, where:'browser'};
 }
 
 async function vomLogRun(p,handle,run){
@@ -6078,7 +6110,8 @@ async function vomOutputs(p,handle){
   if(!p) return [];
   if(p.store!=='folder'){
     var os=await _vomIdx('outputs',p.id);
-    return os.map(function(o){return {tool:o.tool,name:o.name,size:o.size,created:o.created,id:o.id};})
+    return os.map(function(o){return {tool:o.tool,name:o.name,size:o.size,created:o.created,
+                                      dataset:o.dataset||'',id:o.id};})
              .sort(function(a,b){return b.created-a.created;});
   }
   if(!handle) return [];
@@ -6087,11 +6120,23 @@ async function vomOutputs(p,handle){
     var root=await handle.getDirectoryHandle('outputs',{create:true});
     for await (var t of root.entries()){
       if(t[1].kind!=='directory') continue;
+      /* Two levels now: a file directly under the tool came from no dataset;
+         one a level deeper is filed under the dataset that produced it. Both
+         forms are read, so folders written before this still list. */
       for await (var f of t[1].entries()){
-        if(f[1].kind!=='file') continue;
-        var file=await f[1].getFile();
-        list.push({tool:t[0],name:f[0],size:file.size,created:file.lastModified,
-                   path:'outputs/'+t[0]+'/'+f[0]});
+        if(f[1].kind==='file'){
+          var file=await f[1].getFile();
+          list.push({tool:t[0],name:f[0],size:file.size,created:file.lastModified,
+                     dataset:'',path:'outputs/'+t[0]+'/'+f[0]});
+          continue;
+        }
+        if(f[1].kind!=='directory') continue;
+        for await (var g of f[1].entries()){
+          if(g[1].kind!=='file') continue;
+          var gf=await g[1].getFile();
+          list.push({tool:t[0],name:g[0],size:gf.size,created:gf.lastModified,
+                     dataset:f[0],path:'outputs/'+t[0]+'/'+f[0]+'/'+g[0]});
+        }
       }
     }
   }catch(err){}
@@ -6636,9 +6681,13 @@ async function vomOpenOutput(p,handle,o){
   if(!p||!o) return null;
   if(p.store==='folder'){
     if(!handle) throw new Error('the project folder is not connected');
-    var root=await handle.getDirectoryHandle('outputs',{create:false});
-    var td=await root.getDirectoryHandle(o.tool);
-    return await (await td.getFileHandle(o.name)).getFile();
+    /* Walk the path the listing recorded rather than assuming a depth — an
+       output filed under a dataset sits one level deeper than one that is not,
+       and guessing wrong reads as "the file is gone". */
+    var parts=(o.path||('outputs/'+o.tool+'/'+o.name)).split('/');
+    var d=handle;
+    for(var i=0;i<parts.length-1;i++) d=await d.getDirectoryHandle(parts[i]);
+    return await (await d.getFileHandle(parts[parts.length-1])).getFile();
   }
   var rec=await _vomTx('outputs','readonly',function(s){return s.get(o.id);});
   if(!rec||!rec.blob) return null;
@@ -6686,15 +6735,73 @@ async function vomConnect(){
    quietly become the setting for every export after it. */
 var vomNextDest = null;
 
+/* ── Saying that it worked ────────────────────────────────────────────────
+   An export that goes into the project produces NOTHING a browser shows: no
+   download shelf, no new tab, no file appearing anywhere you are looking. So
+   pressing the button looked exactly like pressing a dead one, which is how it
+   was reported. The confirmation goes ON the button that was pressed, because
+   that is where your eyes already are.
+
+   The last export button clicked is REMEMBERED rather than passed through:
+   vomSendOutput is reached from a dozen call sites inside each tool, and
+   threading a button reference through all of them means editing every one —
+   the thing the single-seam design exists to avoid. */
+var _vomLastBtn = null, _vomBtnTimer = null;
+
+/* The confirmation is a small bubble anchored to the button, not a change of
+   the button's own label.
+
+   Rewriting the label was the obvious thing and it was wrong twice over: "⬇ CSV"
+   becoming "✓ Saved to project" makes the button grow and shoves whatever is
+   beside it sideways, and pinning the width instead leaves room for a bare tick
+   that cannot say WHETHER it saved or downloaded — which is the only thing worth
+   saying. A bubble is free of the button's size and can carry the whole
+   sentence. */
+function vomFlash(msg, bad){
+  var b = _vomLastBtn;
+  if(!b || !b.isConnected) return;
+  var old = document.getElementById('vomFlash');
+  if(old) old.remove();
+  var el = document.createElement('div');
+  el.id = 'vomFlash';
+  el.className = 'vom-flash-note' + (bad ? ' bad' : '');
+  el.setAttribute('role', 'status');
+  el.textContent = (bad ? '⚠ ' : '✓ ') + msg;
+  document.body.appendChild(el);
+
+  var r = b.getBoundingClientRect(), w = el.offsetWidth;
+  /* Above the button by preference, below it when that would go off the top —
+     the bubble must never cover the thing you just pressed. */
+  var top = r.top + window.scrollY - el.offsetHeight - 6;
+  if(top < window.scrollY + 4) top = r.bottom + window.scrollY + 6;
+  el.style.top = top + 'px';
+  el.style.left = Math.max(window.scrollX + 6,
+    Math.min(r.left + window.scrollX + r.width / 2 - w / 2,
+             window.scrollX + document.documentElement.clientWidth - w - 6)) + 'px';
+
+  b.classList.add(bad ? 'vom-lit-bad' : 'vom-lit');
+  clearTimeout(_vomBtnTimer);
+  _vomBtnTimer = setTimeout(function(){
+    if(el.isConnected) el.remove();
+    if(b.isConnected) b.classList.remove('vom-lit','vom-lit-bad');
+  }, bad ? 4500 : 2400);
+}
+
 async function vomSendOutput(blob, filename, params){
   var dest = vomNextDest; vomNextDest = null;
   if(dest === 'download' || !vomProjectWritable()){
     vomDownload(blob, filename);
+    vomFlash('Downloaded');
     return 'downloaded';
   }
   if(dest === 'both') vomDownload(blob, filename);
   try{
-    var saved = await vomSaveOutput(vomProject, vomHandle, {tool:vomToolSlug, name:filename, blob:blob});
+    var saved = await vomSaveOutput(vomProject, vomHandle, {
+      tool: vomToolSlug, name: filename, blob: blob,
+      /* Which dataset this came from, so it can be filed under it. */
+      datasetName: vomOpenedDataset ? vomOpenedDataset.name : '',
+      datasetId: vomOpenedDataset ? vomOpenedDataset.id : null,
+    });
     await vomLogRun(vomProject, vomHandle, {
       tool: vomToolSlug, version: vomToolVersion,
       /* If these files came out of the project, say which dataset. A run record
@@ -6705,10 +6812,12 @@ async function vomSendOutput(blob, filename, params){
     });
     vomToast(dest === 'both' ? 'Downloaded and saved into ' + vomProject.name
                              : 'Saved into ' + vomProject.name);
+    vomFlash(dest === 'both' ? 'Saved and downloaded' : 'Saved to project');
     return dest === 'both' ? 'saved into the project and downloaded' : 'saved into the project';
   }catch(e){
     if(dest !== 'both') vomDownload(blob, filename);
     vomToast('Could not save into the project — downloaded instead.');
+    vomFlash('Downloaded instead', true);
     return 'downloaded instead';
   }
 }
@@ -6956,6 +7065,8 @@ function vomSplitify(){
     if(b.classList.contains('vom-split-chev')) return;
     if(!VOM_SPLIT_MATCH(b)) return;
     b.setAttribute('data-vom-split', '1');
+    /* Captured, so the confirmation can be shown on the very button pressed. */
+    b.addEventListener('click', function(){ _vomLastBtn = b; }, true);
     var wrap = document.createElement('span');
     wrap.className = 'vom-split';
     /* A button positioned by its own margin keeps that position: the margin
